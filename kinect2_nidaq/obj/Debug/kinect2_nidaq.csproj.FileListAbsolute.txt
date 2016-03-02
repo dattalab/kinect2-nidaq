@@ -1,0 +1,16 @@
+c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\Debug\kinect2_nidaq.exe.config
+c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\Debug\kinect2_nidaq.csprojResolveAssemblyReference.cache
+c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\Debug\MainWindow.g.cs
+c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\Debug\App.g.cs
+c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\Debug\kinect2_nidaq_MarkupCompile.cache
+c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\Debug\kinect2_nidaq_MarkupCompile.lref
+c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\Debug\kinect2_nidaq.exe
+c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\Debug\kinect2_nidaq.pdb
+c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\Debug\Microsoft.Kinect.dll
+c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\Debug\Microsoft.Kinect.xml
+c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\Debug\MainWindow.baml
+c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\Debug\kinect2_nidaq.g.resources
+c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\Debug\kinect2_nidaq.Properties.Resources.resources
+c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\Debug\kinect2_nidaq.csproj.GenerateResource.Cache
+c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\Debug\kinect2_nidaq.exe
+c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\Debug\kinect2_nidaq.pdb
