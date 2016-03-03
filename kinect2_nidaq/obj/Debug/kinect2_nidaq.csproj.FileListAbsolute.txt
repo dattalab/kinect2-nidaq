@@ -14,3 +14,11 @@ c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_ni
 c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\Debug\kinect2_nidaq.csproj.GenerateResource.Cache
 c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\Debug\kinect2_nidaq.exe
 c:\users\dattalab\documents\visual studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\Debug\kinect2_nidaq.pdb
+C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\Debug\AForge.dll
+C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\Debug\AForge.Video.dll
+C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\Debug\AForge.Video.FFMPEG.dll
+C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\Debug\NationalInstruments.DAQmx.dll
+C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\Debug\AForge.xml
+C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\Debug\AForge.Video.xml
+C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\Debug\AForge.Video.FFMPEG.xml
+C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\Debug\NationalInstruments.DAQmx.xml

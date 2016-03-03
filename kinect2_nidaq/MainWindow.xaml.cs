@@ -4,8 +4,13 @@ using System.IO;
 using System.Windows.Threading;
 using System.Threading.Tasks;
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Threading;
 using Microsoft.Kinect;
 using Sensor;
+using NationalInstruments;
+using NationalInstruments.DAQmx;
+using AForge.Video.FFMPEG;
 
 namespace kinect2_nidaq
 {
@@ -23,15 +28,28 @@ namespace kinect2_nidaq
         DepthFrameEventArgs LastDepthFrame;
         DispatcherTimer ImageTimer;
 
+        AnalogMultiChannelReader NidaqReader;
+        private NidaqData NidaqDump = new NidaqData();
+
+        AsyncCallback AnalogInCallback;
+        NationalInstruments.DAQmx.Task AnalogInTask;
+        NationalInstruments.DAQmx.Task runningTask;
+        Stopwatch StampingWatch;
 
         BlockingCollection<ColorFrameEventArgs> ColorFrameQueue = new BlockingCollection<ColorFrameEventArgs>(Constants.kMaxFrames);
         BlockingCollection<DepthFrameEventArgs> DepthFrameQueue = new BlockingCollection<DepthFrameEventArgs>(Constants.kMaxFrames);
-        Task ColorDumpTask;
-        Task DepthDumpTask;
+        BlockingCollection<NidaqData> NidaqQueue = new BlockingCollection<NidaqData>(Constants.nMaxBuffer);
+
+
+        System.Threading.Tasks.Task ColorDumpTask;
+        System.Threading.Tasks.Task DepthDumpTask;
+        System.Threading.Tasks.Task NidaqDumpTask;
+
         int ColorFramesDropped = 0;
         int DepthFramesDropped = 0;
 
-        string TestPath = @"C:\users\dattalab\desktop\testing.txt";
+        string TestPath1 = @"C:\users\dattalab\desktop\testing_vid_ts.txt";
+        string TestPath2 = @"C:\users\dattalab\desktop\testing_nidaq.txt";
 
         public MainWindow()
         {
@@ -52,6 +70,11 @@ namespace kinect2_nidaq
             {
                 sensor.Open();
 
+                // Start the time stamper
+
+                StampingWatch = new Stopwatch();
+                StampingWatch.Start(); 
+
                 // Open the Kinect
 
                 reader = sensor.OpenMultiSourceFrameReader(FrameSourceTypes.Color | FrameSourceTypes.Depth);
@@ -62,17 +85,45 @@ namespace kinect2_nidaq
                 // Display code
 
                 ImageTimer = new DispatcherTimer();
-                ImageTimer.Interval = TimeSpan.FromMilliseconds(50.0);
+                ImageTimer.Interval = TimeSpan.FromMilliseconds(30.0);
                 ImageTimer.Tick += ImageTimer_Tick;
                 ImageTimer.Start();
 
                 // Start the tasks that empty each queue
 
-                ColorDumpTask = Task.Factory.StartNew(() => ColorRunner());
-                DepthDumpTask = Task.Factory.StartNew(() => DepthRunner());
-                
+                ColorDumpTask = System.Threading.Tasks.Task.Factory.StartNew(() => ColorRunner());
+                DepthDumpTask = System.Threading.Tasks.Task.Factory.StartNew(() => DepthRunner());
+               
 
             }
+
+            // fire up the nidaq, for now just record channel ai0
+            
+            AIChannel MyAiChannel;
+
+            AnalogInTask = new NationalInstruments.DAQmx.Task();
+            AnalogInTask.AIChannels.CreateVoltageChannel(
+                "dev1/ai0",
+                "MyAiChannel",
+                AITerminalConfiguration.Nrse,
+                0,
+                5,
+                AIVoltageUnits.Volts);
+
+            AnalogInTask.Timing.ConfigureSampleClock("", 30, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, 1);
+            AnalogInTask.Control(TaskAction.Verify);
+
+            NidaqReader = new AnalogMultiChannelReader(AnalogInTask.Stream);
+            NidaqReader.SynchronizeCallbacks = true;
+           
+            AnalogInCallback = new AsyncCallback(AnalogIn_Callback);
+            NidaqReader.BeginReadMultiSample(1, AnalogInCallback, AnalogInTask);
+            
+            runningTask = AnalogInTask;
+
+            NidaqDumpTask = System.Threading.Tasks.Task.Factory.StartNew(() => NidaqRunner());
+                
+
         }
 
         /// <summary>
@@ -96,9 +147,6 @@ namespace kinect2_nidaq
 
             ColorFrameQueue.CompleteAdding();
             DepthFrameQueue.CompleteAdding();
-
-
-
 
         }
 
@@ -132,6 +180,7 @@ namespace kinect2_nidaq
                         frame.CopyConvertedFrameDataToArray(colorData, ColorImageFormat.Bgra);
                     }
 
+                    colorEventArgs.TimeStamp = StampingWatch.ElapsedMilliseconds;
                     colorEventArgs.RelativeTime = frame.RelativeTime;
                     colorEventArgs.ColorData = colorData;
                     colorEventArgs.ColorSpacepoints = fColorSpacepoints;
@@ -196,6 +245,23 @@ namespace kinect2_nidaq
         }
 
         /// <summary>
+        /// Deal with the National instruments data
+        /// </summary>
+        /// <param name="ar"></param>
+        void AnalogIn_Callback(IAsyncResult ar)
+        {
+
+            if (null != runningTask && runningTask == ar.AsyncState)
+            {    
+                NidaqDump.Data = NidaqReader.EndReadMultiSample(ar);
+                NidaqDump.TimeStamp = StampingWatch.ElapsedMilliseconds;
+                NidaqQueue.Add(NidaqDump);
+                NidaqReader.BeginReadMultiSample(1, AnalogInCallback, AnalogInTask);
+            }
+            
+        }
+
+        /// <summary>
         /// Updates display
         /// </summary>
         /// <param name="sender"></param>
@@ -223,7 +289,7 @@ namespace kinect2_nidaq
             {
                 // write out all relevant color data stuff...
 
-                File.AppendAllText(TestPath, String.Format("{0}\n", fColorFrame.RelativeTime.TotalMilliseconds));
+                File.AppendAllText(TestPath1, String.Format("{0} {1}\n", fColorFrame.RelativeTime.TotalMilliseconds,fColorFrame.TimeStamp));
 
             }
         }
@@ -237,8 +303,21 @@ namespace kinect2_nidaq
             {
                 // Do something with the depth data...
 
+              
             }
 
+        }
+
+        /// <summary>
+        /// Chomps on nidaq data
+        /// </summary>
+        private void NidaqRunner()
+        {
+            foreach (var fNidaqDatum in NidaqQueue.GetConsumingEnumerable())
+            {
+                // Do something with the nidaq data...
+                File.AppendAllText(TestPath2, String.Format("{0} {1}\n", fNidaqDatum.Data[0, 0], fNidaqDatum.TimeStamp));
+            }
         }
 
     }

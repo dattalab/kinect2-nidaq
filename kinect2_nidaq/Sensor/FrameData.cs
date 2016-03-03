@@ -16,6 +16,7 @@ namespace Sensor
 
         protected int fWidth;
         protected int fHeight;
+        protected long fTimeStamp;
 
         /// <summary>
         /// byte array captured from the frame
@@ -60,6 +61,18 @@ namespace Sensor
             set
             {
                 fRelativeTIme = value;
+            }
+        }
+
+        public long TimeStamp
+        {
+            get
+            {
+                return fTimeStamp;
+            }
+            set
+            {
+                fTimeStamp = value;
             }
         }
 
