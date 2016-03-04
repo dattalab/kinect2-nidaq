@@ -18,3 +18,4 @@ C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_ni
 C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\x64\Release\kinect2_nidaq.csproj.GenerateResource.Cache
 C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\x64\Release\kinect2_nidaq.exe
 C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\x64\Release\kinect2_nidaq.pdb
+C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\x64\Release\AForge.Video.FFMPEG.pdb

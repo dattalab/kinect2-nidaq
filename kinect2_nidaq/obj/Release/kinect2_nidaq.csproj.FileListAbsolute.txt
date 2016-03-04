@@ -21,3 +21,4 @@ C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_ni
 C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\Release\AForge.Video.xml
 C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\Release\AForge.Video.FFMPEG.xml
 C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\Release\NationalInstruments.DAQmx.xml
+C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\Release\kinect2_nidaq.csprojResolveAssemblyReference.cache

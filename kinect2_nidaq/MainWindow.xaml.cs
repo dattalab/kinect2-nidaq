@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows.Threading;
 using System.Threading.Tasks;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using Microsoft.Kinect;
@@ -22,15 +23,19 @@ namespace kinect2_nidaq
 
         // Declarations 
         KinectSensor sensor;
-        MultiSourceFrameReader reader;
+        ColorFrameReader ColorReader;
+        DepthFrameReader DepthReader;
+
         ColorSpacePoint[] fColorSpacepoints = null;
         ColorFrameEventArgs LastColorFrame;
         DepthFrameEventArgs LastDepthFrame;
         DispatcherTimer ImageTimer;
+        byte[] colorData = new byte[Constants.kDefaultColorFrameHeight * Constants.kDefaultColorFrameWidth * Constants.kBytesPerPixel];
+        ushort[] depthData = new ushort[Constants.kDefaultFrameHeight * Constants.kDefaultFrameWidth];
 
         AnalogMultiChannelReader NidaqReader;
         NidaqData NidaqDump = new NidaqData();
-
+        
         AsyncCallback AnalogInCallback;
         NationalInstruments.DAQmx.Task AnalogInTask;
         NationalInstruments.DAQmx.Task runningTask;
@@ -39,7 +44,9 @@ namespace kinect2_nidaq
         BlockingCollection<ColorFrameEventArgs> ColorFrameQueue = new BlockingCollection<ColorFrameEventArgs>(Constants.kMaxFrames);
         BlockingCollection<DepthFrameEventArgs> DepthFrameQueue = new BlockingCollection<DepthFrameEventArgs>(Constants.kMaxFrames);
         BlockingCollection<NidaqData> NidaqQueue = new BlockingCollection<NidaqData>(Constants.nMaxBuffer);
-
+        
+        VideoFileWriter VideoWriter = new VideoFileWriter();
+        TimeSpan VideoWriterInitialTimeSpan;
 
         System.Threading.Tasks.Task ColorDumpTask;
         System.Threading.Tasks.Task DepthDumpTask;
@@ -48,8 +55,14 @@ namespace kinect2_nidaq
         int ColorFramesDropped = 0;
         int DepthFramesDropped = 0;
 
-        string TestPath1 = @"C:\users\dattalab\desktop\testing_vid_ts.txt";
-        string TestPath2 = @"C:\users\dattalab\desktop\testing_nidaq.txt";
+        string TestPath_ColorTs = @"C:\users\dattalab\desktop\testing_color_ts.txt";
+        string TestPath_ColorVid = @"C:\users\dattalab\desktop\testing_color.mp4";
+        string TestPath_DepthTs = @"C:\users\dattalab\desktop\testing_depth_ts.txt";
+        string TestPath_DepthVid = @"C:\users\dattalab\desktop\testing_depth.bin";
+        
+        // write out metadata...
+
+        TimeSpan timeout = new TimeSpan(100000);
 
         public MainWindow()
         {
@@ -77,8 +90,11 @@ namespace kinect2_nidaq
 
                 // Open the Kinect
 
-                reader = sensor.OpenMultiSourceFrameReader(FrameSourceTypes.Color | FrameSourceTypes.Depth);
-                reader.MultiSourceFrameArrived += Reader_MultiSourceFrameArrived;
+                ColorReader = sensor.ColorFrameSource.OpenReader();
+                DepthReader = sensor.DepthFrameSource.OpenReader();
+                
+                ColorReader.FrameArrived += ColorReader_FrameArrived;
+                DepthReader.FrameArrived += DepthReader_FrameArrived;
 
                 // Open the NiDAQ, set up timer
 
@@ -131,11 +147,15 @@ namespace kinect2_nidaq
         /// <param name="e"></param>
         private void Window_Closed(object sender, EventArgs e)
 
-
         {
-            if (reader != null)
+            if (ColorReader != null)
             {
-                reader.Dispose();
+                ColorReader.Dispose();
+            }
+
+            if (DepthReader != null)
+            {
+                DepthReader.Dispose();
             }
 
             if (sensor != null)
@@ -146,6 +166,30 @@ namespace kinect2_nidaq
             ColorFrameQueue.CompleteAdding();
             DepthFrameQueue.CompleteAdding();
             NidaqQueue.CompleteAdding();
+            
+            foreach (System.Threading.Tasks.Task task in new List<System.Threading.Tasks.Task>
+            {
+                DepthDumpTask,
+                ColorDumpTask,
+                NidaqDumpTask
+            })
+            {
+                if (task != null)
+                {
+                    try
+                    {
+                        task.Wait();
+                    }
+                    catch (AggregateException ae)
+                    {
+                        ae.Handle((x) =>
+                            {
+                                // do something if the task doesn't finish...
+                                return false;
+                            });
+                    }
+                }
+            }
 
         }
 
@@ -154,21 +198,24 @@ namespace kinect2_nidaq
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        void Reader_MultiSourceFrameArrived(object sender, MultiSourceFrameArrivedEventArgs e)
+        void ColorReader_FrameArrived(object sender, ColorFrameArrivedEventArgs e)
         {
-            ColorFrameEventArgs colorEventArgs = new ColorFrameEventArgs();
-            var reference = e.FrameReference.AcquireFrame();
-            colorEventArgs.TimeStamp = StampingWatch.ElapsedTicks;
-
+            
             // grab and dispatch
 
-            using (var frame = reference.ColorFrameReference.AcquireFrame())
+            using (ColorFrame frame = e.FrameReference.AcquireFrame())
             {
+                
+                ColorFrameEventArgs colorEventArgs = new ColorFrameEventArgs();
+                colorEventArgs.RelativeTime = e.FrameReference.RelativeTime;
+                colorEventArgs.TimeStamp = StampingWatch.ElapsedMilliseconds;
 
-                if (frame != null)
+                if (frame == null)
                 {
-
-                    byte[] colorData = new byte[frame.FrameDescription.Width * frame.FrameDescription.Height * Constants.kBytesPerPixel];
+                    ColorFramesDropped++;
+                }
+                else
+                {   
 
                     if (frame.RawColorImageFormat == ColorImageFormat.Bgra)
                     {
@@ -190,35 +237,38 @@ namespace kinect2_nidaq
 
                     // update to include absolute timestamps with hi-rest stopwatch
 
-                    LastColorFrame = colorEventArgs;
-
-                    //oh boy this adds up fast...
-
-                    ColorFrameQueue.Add(colorEventArgs);
+                    ColorFrameArrived(colorEventArgs);
 
                 }
-                else
-                {
-                    ColorFramesDropped++;
-                }
-
             }
+        }
 
-            using (var frame = reference.DepthFrameReference.AcquireFrame())
+        void ColorFrameArrived(ColorFrameEventArgs e)
+        {
+            LastColorFrame=e;
+            ColorFrameQueue.Add(e);
+        }
+
+        void DepthReader_FrameArrived(object sender, DepthFrameArrivedEventArgs e)
+        {
+            using (DepthFrame frame = e.FrameReference.AcquireFrame())
             {
 
                 DepthFrameEventArgs depthEventArgs = new DepthFrameEventArgs();
 
-                if (frame != null)
+                if (frame == null)
                 {
-
-                    ushort[] depthData = new ushort[frame.FrameDescription.Width * frame.FrameDescription.Height];
+                    DepthFramesDropped++;
+                }
+                else
+                {
+                    depthEventArgs.RelativeTime = frame.RelativeTime;                   
                     frame.CopyFrameDataToArray(depthData);
 
                     fColorSpacepoints = new ColorSpacePoint[depthData.Length];
                     sensor.CoordinateMapper.MapDepthFrameToColorSpace(depthData, fColorSpacepoints);
 
-                    depthEventArgs.RelativeTime = frame.RelativeTime;
+                    depthEventArgs.TimeStamp = StampingWatch.ElapsedMilliseconds;
                     depthEventArgs.DepthData = depthData;
                     depthEventArgs.Height = frame.FrameDescription.Height;
                     depthEventArgs.Width = frame.FrameDescription.Width;
@@ -227,22 +277,18 @@ namespace kinect2_nidaq
 
                     // update to include absolute timestamps with hi-rest stopwatch
 
-                    LastDepthFrame = depthEventArgs;
-
-                    //oh boy this adds up fast...
-
-                    DepthFrameQueue.Add(depthEventArgs);
+                    DepthFrameArrived(depthEventArgs);
 
                 }
-                else
-                {
-                    DepthFramesDropped++;
-                }
-
             }
-
         }
 
+        void DepthFrameArrived(DepthFrameEventArgs e)
+        {
+            LastDepthFrame=e;
+            DepthFrameQueue.Add(e);
+        }
+      
         /// <summary>
         /// Deal with the National instruments data
         /// </summary>
@@ -282,42 +328,56 @@ namespace kinect2_nidaq
         }
 
         /// <summary>
-        /// Chomps on color data
+        /// Chomps on color data (write out to mp4)
         /// </summary>
         private void ColorRunner()
         {
-            foreach (var fColorFrame in ColorFrameQueue.GetConsumingEnumerable())
+            while (!ColorFrameQueue.IsCompleted)
             {
-                // write out all relevant color data stuff...
-
-                //File.AppendAllText(TestPath1, String.Format("{0} {1}\n", fColorFrame.RelativeTime.TotalMilliseconds,fColorFrame.TimeStamp));
-
+                ColorFrameEventArgs colorData = null;
+                while (ColorFrameQueue.TryTake(out colorData, timeout))
+                {
+                    if (!VideoWriter.IsOpen)
+                    {
+                        VideoWriter.Open(TestPath_ColorVid, 512, 424);
+                        this.VideoWriterInitialTimeSpan = colorData.RelativeTime;
+                    }
+                    File.AppendAllText(TestPath_ColorTs, String.Format("{0} {1}\n", colorData.RelativeTime.TotalMilliseconds, colorData.TimeStamp));
+                    VideoWriter.WriteVideoFrame(colorData.ToBitmap().ToSystemBitmap(), colorData.RelativeTime - this.VideoWriterInitialTimeSpan);
+                }
             }
+            
         }
 
         /// <summary>
-        /// Chomps on depth data
+        /// Chomps on depth data (write out to bin)
         /// </summary>
         private void DepthRunner()
         {
-            foreach (var fDepthFrame in DepthFrameQueue.GetConsumingEnumerable())
+            while (!DepthFrameQueue.IsCompleted)
             {
-                // Do something with the depth data...
-
-              
+                DepthFrameEventArgs depthData = null;
+                while (DepthFrameQueue.TryTake(out depthData, timeout))
+                {
+                    File.AppendAllText(TestPath_DepthTs, String.Format("{0} {1}\n", depthData.RelativeTime.TotalMilliseconds, depthData.TimeStamp));
+                }
             }
-
+          
         }
 
-        /// <summary>
-        /// Chomps on nidaq data
+        /// <summary> 
+        /// Chomps on nidaq data (write out to bin)
         /// </summary>
         private void NidaqRunner()
         {
-            foreach (var fNidaqDatum in NidaqQueue.GetConsumingEnumerable())
+            while (!NidaqQueue.IsCompleted)
             {
-                // Do something with the nidaq data...
-                //File.AppendAllText(TestPath2, String.Format("{0} {1}\n", fNidaqDatum.Data[0, 0], fNidaqDatum.TimeStamp));
+                NidaqData nidaqDatum = null;
+                while (NidaqQueue.TryTake(out nidaqDatum, timeout))
+                {
+                    // write out nidaq data, etc. etc.
+                    ;
+                }
             }
         }
 
