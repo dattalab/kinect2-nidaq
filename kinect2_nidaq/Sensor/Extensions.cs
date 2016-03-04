@@ -90,9 +90,9 @@ namespace Sensor
 
                 ushort depth = e.DepthData[depthIndex];
 
-                byte intensity = (byte)(depth >= minDepth ? depth : minDepth);
-                intensity = (byte)(depth <= maxDepth ? depth : maxDepth);
-
+                byte intensity = (byte)(depth >= minDepth ? depth : 0);
+                intensity = (byte)(depth <= maxDepth ? depth : 0);
+                
                 pixels[colorIndex++] = intensity;
                 pixels[colorIndex++] = intensity;
                 pixels[colorIndex++] = intensity;

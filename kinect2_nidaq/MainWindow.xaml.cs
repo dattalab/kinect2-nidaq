@@ -29,7 +29,7 @@ namespace kinect2_nidaq
         DispatcherTimer ImageTimer;
 
         AnalogMultiChannelReader NidaqReader;
-        private NidaqData NidaqDump = new NidaqData();
+        NidaqData NidaqDump = new NidaqData();
 
         AsyncCallback AnalogInCallback;
         NationalInstruments.DAQmx.Task AnalogInTask;
@@ -85,14 +85,14 @@ namespace kinect2_nidaq
                 // Display code
 
                 ImageTimer = new DispatcherTimer();
-                ImageTimer.Interval = TimeSpan.FromMilliseconds(30.0);
+                ImageTimer.Interval = TimeSpan.FromMilliseconds(50.0);
                 ImageTimer.Tick += ImageTimer_Tick;
                 ImageTimer.Start();
 
                 // Start the tasks that empty each queue
 
-                ColorDumpTask = System.Threading.Tasks.Task.Factory.StartNew(() => ColorRunner());
-                DepthDumpTask = System.Threading.Tasks.Task.Factory.StartNew(() => DepthRunner());
+                ColorDumpTask = System.Threading.Tasks.Task.Factory.StartNew(ColorRunner,TaskCreationOptions.LongRunning);
+                DepthDumpTask = System.Threading.Tasks.Task.Factory.StartNew(DepthRunner,TaskCreationOptions.LongRunning);
                
 
             }
@@ -120,10 +120,8 @@ namespace kinect2_nidaq
             NidaqReader.BeginReadMultiSample(1, AnalogInCallback, AnalogInTask);
             
             runningTask = AnalogInTask;
-
-            NidaqDumpTask = System.Threading.Tasks.Task.Factory.StartNew(() => NidaqRunner());
-                
-
+            NidaqDumpTask = System.Threading.Tasks.Task.Factory.StartNew(NidaqRunner,TaskCreationOptions.LongRunning);
+            
         }
 
         /// <summary>
@@ -147,6 +145,7 @@ namespace kinect2_nidaq
 
             ColorFrameQueue.CompleteAdding();
             DepthFrameQueue.CompleteAdding();
+            NidaqQueue.CompleteAdding();
 
         }
 
@@ -157,14 +156,14 @@ namespace kinect2_nidaq
         /// <param name="e"></param>
         void Reader_MultiSourceFrameArrived(object sender, MultiSourceFrameArrivedEventArgs e)
         {
+            ColorFrameEventArgs colorEventArgs = new ColorFrameEventArgs();
             var reference = e.FrameReference.AcquireFrame();
+            colorEventArgs.TimeStamp = StampingWatch.ElapsedTicks;
 
             // grab and dispatch
 
             using (var frame = reference.ColorFrameReference.AcquireFrame())
             {
-
-                ColorFrameEventArgs colorEventArgs = new ColorFrameEventArgs();
 
                 if (frame != null)
                 {
@@ -180,7 +179,7 @@ namespace kinect2_nidaq
                         frame.CopyConvertedFrameDataToArray(colorData, ColorImageFormat.Bgra);
                     }
 
-                    colorEventArgs.TimeStamp = StampingWatch.ElapsedMilliseconds;
+                    
                     colorEventArgs.RelativeTime = frame.RelativeTime;
                     colorEventArgs.ColorData = colorData;
                     colorEventArgs.ColorSpacepoints = fColorSpacepoints;
@@ -252,9 +251,11 @@ namespace kinect2_nidaq
         {
 
             if (null != runningTask && runningTask == ar.AsyncState)
-            {    
+            {
+                // read in with waveform data type to get timestamp
+
                 NidaqDump.Data = NidaqReader.EndReadMultiSample(ar);
-                NidaqDump.TimeStamp = StampingWatch.ElapsedMilliseconds;
+                NidaqDump.TimeStamp = StampingWatch.ElapsedTicks;
                 NidaqQueue.Add(NidaqDump);
                 NidaqReader.BeginReadMultiSample(1, AnalogInCallback, AnalogInTask);
             }
@@ -289,7 +290,7 @@ namespace kinect2_nidaq
             {
                 // write out all relevant color data stuff...
 
-                File.AppendAllText(TestPath1, String.Format("{0} {1}\n", fColorFrame.RelativeTime.TotalMilliseconds,fColorFrame.TimeStamp));
+                //File.AppendAllText(TestPath1, String.Format("{0} {1}\n", fColorFrame.RelativeTime.TotalMilliseconds,fColorFrame.TimeStamp));
 
             }
         }
@@ -316,7 +317,7 @@ namespace kinect2_nidaq
             foreach (var fNidaqDatum in NidaqQueue.GetConsumingEnumerable())
             {
                 // Do something with the nidaq data...
-                File.AppendAllText(TestPath2, String.Format("{0} {1}\n", fNidaqDatum.Data[0, 0], fNidaqDatum.TimeStamp));
+                //File.AppendAllText(TestPath2, String.Format("{0} {1}\n", fNidaqDatum.Data[0, 0], fNidaqDatum.TimeStamp));
             }
         }
 
