@@ -21,37 +21,121 @@ namespace kinect2_nidaq
     public partial class MainWindow : Window
     {
 
-        // Declarations 
+        /// <summary>
+        /// Kinect Sensor
+        /// </summary>
         KinectSensor sensor;
+
+        /// <summary>
+        /// Color frame Reader
+        /// </summary>
         ColorFrameReader ColorReader;
+
+        /// <summary>
+        /// Depth frame reader
+        /// </summary>
         DepthFrameReader DepthReader;
 
+        /// <summary>
+        /// Map from depth to color
+        /// </summary>
         ColorSpacePoint[] fColorSpacepoints = null;
+
+        /// <summary>
+        /// For color frame display
+        /// </summary>
         ColorFrameEventArgs LastColorFrame;
+
+        /// <summary>
+        /// For depth frame display
+        /// </summary>
         DepthFrameEventArgs LastDepthFrame;
+
+        /// <summary>
+        /// Display updater
+        /// </summary>
         DispatcherTimer ImageTimer;
+
+        /// <summary>
+        /// Color data storage buffer
+        /// </summary>
         byte[] colorData = new byte[Constants.kDefaultColorFrameHeight * Constants.kDefaultColorFrameWidth * Constants.kBytesPerPixel];
+
+        /// <summary>
+        /// Depth data storage buffer
+        /// </summary>
         ushort[] depthData = new ushort[Constants.kDefaultFrameHeight * Constants.kDefaultFrameWidth];
 
+        /// <summary>
+        /// National Instruments reader
+        /// </summary>
         AnalogMultiChannelReader NidaqReader;
+
+        /// <summary>
+        /// Class for storing national instruments data
+        /// </summary>
         NidaqData NidaqDump = new NidaqData();
         
+        /// <summary>
+        /// National Instruments callback
+        /// </summary>
         AsyncCallback AnalogInCallback;
+
+        /// <summary>
+        /// National Instruments task
+        /// </summary>
         NationalInstruments.DAQmx.Task AnalogInTask;
         NationalInstruments.DAQmx.Task runningTask;
+
+        /// <summary>
+        /// Common timestamp
+        /// </summary>
         Stopwatch StampingWatch;
 
+        /// <summary>
+        /// Queue for color frames
+        /// </summary>
         BlockingCollection<ColorFrameEventArgs> ColorFrameQueue = new BlockingCollection<ColorFrameEventArgs>(Constants.kMaxFrames);
+
+        /// <summary>
+        /// Queue for depth frames
+        /// </summary>
         BlockingCollection<DepthFrameEventArgs> DepthFrameQueue = new BlockingCollection<DepthFrameEventArgs>(Constants.kMaxFrames);
-        BlockingCollection<NidaqData> NidaqQueue = new BlockingCollection<NidaqData>(Constants.nMaxBuffer);
-        
+
+        /// <summary>
+        /// Queue for National Instruments data
+        /// </summary>
+        BlockingCollection<AnalogWaveform<double>[]> NidaqQueue = new BlockingCollection<AnalogWaveform<double>[]>(Constants.nMaxBuffer);
+       
+
+        /// <summary>
+        /// For writing out color video files
+        /// </summary>
         VideoFileWriter VideoWriter = new VideoFileWriter();
+        
+        /// <summary>
+        /// Video timestamp
+        /// </summary>
         TimeSpan VideoWriterInitialTimeSpan;
 
+        /// <summary>
+        /// Color queue dump
+        /// </summary>
         System.Threading.Tasks.Task ColorDumpTask;
+
+        /// <summary>
+        /// Depth queue dump
+        /// </summary>
         System.Threading.Tasks.Task DepthDumpTask;
+
+        /// <summary>
+        /// National Instruments queue dump
+        /// </summary>
         System.Threading.Tasks.Task NidaqDumpTask;
 
+        /// <summary>
+        /// How many frames dropped?
+        /// </summary>
         int ColorFramesDropped = 0;
         int DepthFramesDropped = 0;
 
@@ -59,7 +143,8 @@ namespace kinect2_nidaq
         string TestPath_ColorVid = @"C:\users\dattalab\desktop\testing_color.mp4";
         string TestPath_DepthTs = @"C:\users\dattalab\desktop\testing_depth_ts.txt";
         string TestPath_DepthVid = @"C:\users\dattalab\desktop\testing_depth.bin";
-        
+        string TestPath_Nidaq = @"C:\users\dattalab\desktop\testing_nidaq.txt";
+
         // write out metadata...
 
         TimeSpan timeout = new TimeSpan(100000);
@@ -133,7 +218,7 @@ namespace kinect2_nidaq
             NidaqReader.SynchronizeCallbacks = true;
            
             AnalogInCallback = new AsyncCallback(AnalogIn_Callback);
-            NidaqReader.BeginReadMultiSample(1, AnalogInCallback, AnalogInTask);
+            NidaqReader.BeginReadWaveform(1, AnalogInCallback, AnalogInTask);
             
             runningTask = AnalogInTask;
             NidaqDumpTask = System.Threading.Tasks.Task.Factory.StartNew(NidaqRunner,TaskCreationOptions.LongRunning);
@@ -300,10 +385,9 @@ namespace kinect2_nidaq
             {
                 // read in with waveform data type to get timestamp
 
-                NidaqDump.Data = NidaqReader.EndReadMultiSample(ar);
-                NidaqDump.TimeStamp = StampingWatch.ElapsedTicks;
-                NidaqQueue.Add(NidaqDump);
-                NidaqReader.BeginReadMultiSample(1, AnalogInCallback, AnalogInTask);
+                AnalogWaveform<double>[] Waveforms = NidaqReader.EndReadWaveform(ar);
+                NidaqQueue.Add(Waveforms);
+                NidaqReader.BeginReadWaveform(1, AnalogIn_Callback, AnalogInTask);
             }
             
         }
@@ -372,11 +456,38 @@ namespace kinect2_nidaq
         {
             while (!NidaqQueue.IsCompleted)
             {
-                NidaqData nidaqDatum = null;
-                while (NidaqQueue.TryTake(out nidaqDatum, timeout))
+                AnalogWaveform<double>[] NIDatum = null;
+                
+                while (NidaqQueue.TryTake(out NIDatum, timeout))
                 {
+
+                    int nsamples = NIDatum[0].SampleCount;
+                    int nchannels = NIDatum.Length;
+
+                    double[,] data = new double[nsamples, nchannels];
+                    NationalInstruments.PrecisionDateTime[,] timestamps = new NationalInstruments.PrecisionDateTime[nsamples,nchannels];
+
                     // write out nidaq data, etc. etc.
-                    ;
+
+                    for (int i = 0; i < NIDatum.Length; i++) 
+                    {
+                        double[] tmp = NIDatum[i].GetScaledData();
+                        NationalInstruments.PrecisionDateTime[] tmp1 = NIDatum[i].GetPrecisionTimeStamps();
+
+                        // do something with each datapoint and timestamp
+
+                        for (int ii = 0; ii < tmp.Length; ii++)
+                        {
+                            data[ii, i] = tmp[ii];
+                            timestamps[ii, i] = tmp1[ii];
+                        }
+
+                    }
+
+                    // now we can write out to the file in an ordered fashion...
+
+
+
                 }
             }
         }
