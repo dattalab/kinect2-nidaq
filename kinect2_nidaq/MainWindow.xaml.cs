@@ -2,6 +2,7 @@
 using System.Windows;
 using System.IO;
 using System.Windows.Threading;
+using System.Windows.Controls;
 using System.Threading.Tasks;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -12,6 +13,7 @@ using Sensor;
 using NationalInstruments;
 using NationalInstruments.DAQmx;
 using AForge.Video.FFMPEG;
+using Microsoft.WindowsAPICodePack.Dialogs;
 
 namespace kinect2_nidaq
 {
@@ -87,6 +89,9 @@ namespace kinect2_nidaq
         NationalInstruments.DAQmx.Task AnalogInTask;
         NationalInstruments.DAQmx.Task runningTask;
 
+        PerformanceCounter CPUPerformance;
+        PerformanceCounter RAMPerformance;
+
         /// <summary>
         /// Common timestamp
         /// </summary>
@@ -134,16 +139,59 @@ namespace kinect2_nidaq
         System.Threading.Tasks.Task NidaqDumpTask;
 
         /// <summary>
-        /// How many frames dropped?
+        /// How many color frames dropped?
         /// </summary>
-        int ColorFramesDropped = 0;
-        int DepthFramesDropped = 0;
+        private int ColorFramesDropped = 0;
+        
+        /// <summary>
+        /// How many depth frames dropped?
+        /// </summary>
+        private int DepthFramesDropped = 0;
 
-        string TestPath_ColorTs = @"C:\users\dattalab\desktop\testing_color_ts.txt";
-        string TestPath_ColorVid = @"C:\users\dattalab\desktop\testing_color.mp4";
-        string TestPath_DepthTs = @"C:\users\dattalab\desktop\testing_depth_ts.txt";
-        string TestPath_DepthVid = @"C:\users\dattalab\desktop\testing_depth.bin";
-        string TestPath_Nidaq = @"C:\users\dattalab\desktop\testing_nidaq.txt";
+
+        /// <summary>
+        /// Directory initialization
+        /// </summary>
+        private string TestPath_ColorTs;
+        private string TestPath_ColorVid;
+        private string TestPath_DepthTs;
+        private string TestPath_Nidaq;
+        private string TestPath_Timing;
+
+        /// <summary>
+        /// Terminal configuration
+        /// </summary>
+        private AITerminalConfiguration MyTerminalConfig;
+        
+        /// <summary>
+        /// Status bar timer 
+        /// </summary>
+        private DispatcherTimer CheckTimer;
+
+        /// <summary>
+        /// Maximum sampling rate
+        /// </summary>
+        private double MaxRate = 1000;
+
+        /// <summary>
+        /// Actual sampling rate
+        /// </summary>
+        private double SamplingRate;
+
+        /// <summary>
+        /// Save folder
+        /// </summary>
+        private String SaveFolder;
+        
+        private FileStream NidaqFile;
+        private StreamWriter NidaqStream;
+
+        private FileStream ColorTSFile;
+        private FileStream DepthTSFile;
+
+        private StreamWriter ColorTSStream;
+        private StreamWriter DepthTSStream;
+
 
         // write out metadata...
 
@@ -171,58 +219,74 @@ namespace kinect2_nidaq
                 // Start the time stamper
 
                 StampingWatch = new Stopwatch();
-                StampingWatch.Start(); 
+                StampingWatch.Start();
 
-                // Open the Kinect
+                // get all channels...
 
-                ColorReader = sensor.ColorFrameSource.OpenReader();
-                DepthReader = sensor.DepthFrameSource.OpenReader();
+                string[] deviceList = DaqSystem.Local.Devices;
+                foreach (string currentDevice in deviceList)
+                {
+                    DevBox.Items.Add(currentDevice.ToString());
+                }
                 
-                ColorReader.FrameArrived += ColorReader_FrameArrived;
-                DepthReader.FrameArrived += DepthReader_FrameArrived;
+                CPUPerformance = new PerformanceCounter();
+                RAMPerformance = new PerformanceCounter("Memory","Available MBytes");
 
-                // Open the NiDAQ, set up timer
+                CPUPerformance.CategoryName = "Processor";
+                CPUPerformance.CounterName = "% Processor Time";
+                CPUPerformance.InstanceName = "_Total";
 
-                // Display code
-
-                ImageTimer = new DispatcherTimer();
-                ImageTimer.Interval = TimeSpan.FromMilliseconds(50.0);
-                ImageTimer.Tick += ImageTimer_Tick;
-                ImageTimer.Start();
-
-                // Start the tasks that empty each queue
-
-                ColorDumpTask = System.Threading.Tasks.Task.Factory.StartNew(ColorRunner,TaskCreationOptions.LongRunning);
-                DepthDumpTask = System.Threading.Tasks.Task.Factory.StartNew(DepthRunner,TaskCreationOptions.LongRunning);
-               
 
             }
+            else
+            {
+                ;
+            }  
 
-            // fire up the nidaq, for now just record channel ai0
+        }
+
+        private void StartButton_Click(object sender, RoutedEventArgs e)
+        {
             
-            AIChannel MyAiChannel;
+            // Open the Kinect
 
-            AnalogInTask = new NationalInstruments.DAQmx.Task();
-            AnalogInTask.AIChannels.CreateVoltageChannel(
-                "dev1/ai0",
-                "MyAiChannel",
-                AITerminalConfiguration.Nrse,
-                0,
-                5,
-                AIVoltageUnits.Volts);
+            ColorReader = sensor.ColorFrameSource.OpenReader();
+            DepthReader = sensor.DepthFrameSource.OpenReader();
 
-            AnalogInTask.Timing.ConfigureSampleClock("", 30, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, 1);
-            AnalogInTask.Control(TaskAction.Verify);
+            ColorReader.FrameArrived += ColorReader_FrameArrived;
+            DepthReader.FrameArrived += DepthReader_FrameArrived;
 
-            NidaqReader = new AnalogMultiChannelReader(AnalogInTask.Stream);
-            NidaqReader.SynchronizeCallbacks = true;
-           
-            AnalogInCallback = new AsyncCallback(AnalogIn_Callback);
-            NidaqReader.BeginReadWaveform(1, AnalogInCallback, AnalogInTask);
+            // Open the NiDAQ, set up timer
+
+            // Display code
+
+            ImageTimer = new DispatcherTimer();
+            ImageTimer.Interval = TimeSpan.FromMilliseconds(50.0);
+            ImageTimer.Tick += ImageTimer_Tick;
+            ImageTimer.Start();
+
+            // HD check
+
+            Console.WriteLine("{0}", Directory.GetDirectoryRoot(SaveFolder));
+            CheckTimer = new DispatcherTimer();
+            CheckTimer.Interval = TimeSpan.FromMilliseconds(2000);
+            CheckTimer.Tick += CheckTimer_Tick;
+            CheckTimer.Start();
+
+            // Start the tasks that empty each queue
+
+            ColorDumpTask = System.Threading.Tasks.Task.Factory.StartNew(ColorRunner, TaskCreationOptions.LongRunning);
+            DepthDumpTask = System.Threading.Tasks.Task.Factory.StartNew(DepthRunner, TaskCreationOptions.LongRunning);
+            NidaqDumpTask = System.Threading.Tasks.Task.Factory.StartNew(NidaqRunner, TaskCreationOptions.LongRunning);
+
+            StartButton.IsEnabled = false;
+
+            ColorTSFile = new FileStream(TestPath_ColorTs, FileMode.Append);
+            ColorTSStream = new StreamWriter(ColorTSFile);
             
-            runningTask = AnalogInTask;
-            NidaqDumpTask = System.Threading.Tasks.Task.Factory.StartNew(NidaqRunner,TaskCreationOptions.LongRunning);
-            
+            DepthTSFile = new FileStream(TestPath_DepthTs, FileMode.Append);
+            DepthTSStream = new StreamWriter(DepthTSFile);
+
         }
 
         /// <summary>
@@ -231,8 +295,9 @@ namespace kinect2_nidaq
         /// <param name="sender"></param>
         /// <param name="e"></param>
         private void Window_Closed(object sender, EventArgs e)
-
         {
+            // Dispose of the Kinect and the readers
+
             if (ColorReader != null)
             {
                 ColorReader.Dispose();
@@ -276,14 +341,23 @@ namespace kinect2_nidaq
                 }
             }
 
+            // Close out file streams
+
+            NidaqFile.Close();
+            NidaqStream.Close();
+            DepthTSFile.Close();
+            DepthTSStream.Close();
+            ColorTSFile.Close();
+            ColorTSStream.Close();
+
         }
 
         /// <summary>
-        /// Grab the multi-source data, update display code and buffers
+        /// Grab and release color data, update display code and buffers
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        void ColorReader_FrameArrived(object sender, ColorFrameArrivedEventArgs e)
+        private void ColorReader_FrameArrived(object sender, ColorFrameArrivedEventArgs e)
         {
             
             // grab and dispatch
@@ -328,13 +402,22 @@ namespace kinect2_nidaq
             }
         }
 
-        void ColorFrameArrived(ColorFrameEventArgs e)
+        /// <summary>
+        /// Pass the color frame data
+        /// </summary>
+        /// <param name="e"></param>
+        private void ColorFrameArrived(ColorFrameEventArgs e)
         {
             LastColorFrame=e;
             ColorFrameQueue.Add(e);
         }
 
-        void DepthReader_FrameArrived(object sender, DepthFrameArrivedEventArgs e)
+        /// <summary>
+        /// Grab and release depth data
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void DepthReader_FrameArrived(object sender, DepthFrameArrivedEventArgs e)
         {
             using (DepthFrame frame = e.FrameReference.AcquireFrame())
             {
@@ -368,7 +451,11 @@ namespace kinect2_nidaq
             }
         }
 
-        void DepthFrameArrived(DepthFrameEventArgs e)
+        /// <summary>
+        /// Pass the depth data
+        /// </summary>
+        /// <param name="e"></param>
+        private void DepthFrameArrived(DepthFrameEventArgs e)
         {
             LastDepthFrame=e;
             DepthFrameQueue.Add(e);
@@ -378,7 +465,7 @@ namespace kinect2_nidaq
         /// Deal with the National instruments data
         /// </summary>
         /// <param name="ar"></param>
-        void AnalogIn_Callback(IAsyncResult ar)
+        private void AnalogIn_Callback(IAsyncResult ar)
         {
 
             if (null != runningTask && runningTask == ar.AsyncState)
@@ -397,7 +484,7 @@ namespace kinect2_nidaq
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        void ImageTimer_Tick(object sender, EventArgs e)
+        private void ImageTimer_Tick(object sender, EventArgs e)
         {
             if (null != LastColorFrame)
             {
@@ -426,7 +513,8 @@ namespace kinect2_nidaq
                         VideoWriter.Open(TestPath_ColorVid, 512, 424);
                         this.VideoWriterInitialTimeSpan = colorData.RelativeTime;
                     }
-                    File.AppendAllText(TestPath_ColorTs, String.Format("{0} {1}\n", colorData.RelativeTime.TotalMilliseconds, colorData.TimeStamp));
+                    
+                    ColorTSStream.WriteLine(String.Format("{0} {1}", colorData.RelativeTime.TotalMilliseconds, colorData.TimeStamp));
                     VideoWriter.WriteVideoFrame(colorData.ToBitmap().ToSystemBitmap(), colorData.RelativeTime - this.VideoWriterInitialTimeSpan);
                 }
             }
@@ -443,7 +531,7 @@ namespace kinect2_nidaq
                 DepthFrameEventArgs depthData = null;
                 while (DepthFrameQueue.TryTake(out depthData, timeout))
                 {
-                    File.AppendAllText(TestPath_DepthTs, String.Format("{0} {1}\n", depthData.RelativeTime.TotalMilliseconds, depthData.TimeStamp));
+                    DepthTSStream.WriteLine(String.Format("{0} {1}", depthData.RelativeTime.TotalMilliseconds, depthData.TimeStamp));
                 }
             }
           
@@ -457,41 +545,253 @@ namespace kinect2_nidaq
             while (!NidaqQueue.IsCompleted)
             {
                 AnalogWaveform<double>[] NIDatum = null;
-                
+
                 while (NidaqQueue.TryTake(out NIDatum, timeout))
                 {
 
                     int nsamples = NIDatum[0].SampleCount;
                     int nchannels = NIDatum.Length;
 
-                    double[,] data = new double[nsamples, nchannels];
-                    NationalInstruments.PrecisionDateTime[,] timestamps = new NationalInstruments.PrecisionDateTime[nsamples,nchannels];
+                    double[][] data = new double[nchannels][];
 
                     // write out nidaq data, etc. etc.
 
-                    for (int i = 0; i < NIDatum.Length; i++) 
+                    for (int i = 0; i < nchannels; i++)
                     {
                         double[] tmp = NIDatum[i].GetScaledData();
-                        NationalInstruments.PrecisionDateTime[] tmp1 = NIDatum[i].GetPrecisionTimeStamps();
 
                         // do something with each datapoint and timestamp
 
-                        for (int ii = 0; ii < tmp.Length; ii++)
-                        {
-                            data[ii, i] = tmp[ii];
-                            timestamps[ii, i] = tmp1[ii];
-                        }
-
+                        data[i] = new double[nsamples];
+                        data[i] = tmp;
                     }
 
-                    // now we can write out to the file in an ordered fashion...
+                    NationalInstruments.PrecisionDateTime[] timestamps = NIDatum[0].GetPrecisionTimeStamps();
 
+                    // now we can write out...             
+
+                    for (int i = 0; i < nsamples; i++)
+                    {
+                        string writestring = "";
+                        for (int ii = 0; ii < nchannels; ii++)
+                        {
+                            writestring = String.Format("{0} {1}", writestring, data[ii][i]);
+                        }
+                        NidaqStream.WriteLine(String.Format("{0} {1}",
+                            writestring,
+                            (double)timestamps[i].WholeSeconds + timestamps[i].FractionalSeconds));
+
+                    }
 
 
                 }
             }
         }
 
+        /// <summary>
+        /// Queue up the NiDaq board with selected properties
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void NidaqPrepare_Click(object sender, RoutedEventArgs e)
+        {
+            AIChannel MyAiChannel;
+
+            AnalogInTask = new NationalInstruments.DAQmx.Task();
+
+            string ChannelString = "";
+
+            if (aiChannelList.SelectedItems.Count > 0)
+            {
+
+                foreach (var Channel in aiChannelList.SelectedItems)
+                {
+                    ChannelString = String.Format("{0} {1},", ChannelString, Channel.ToString());
+                }
+
+                ChannelString.Trim(new Char[] { ' ', ',' });
+                Console.WriteLine(ChannelString);
+
+                AnalogInTask.AIChannels.CreateVoltageChannel(
+                    ChannelString,
+                    "MyAiChannel",
+                    MyTerminalConfig,
+                    0,
+                    5,
+                    AIVoltageUnits.Volts);
+
+                AnalogInTask.Timing.ConfigureSampleClock("", SamplingRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, 1);
+                AnalogInTask.Control(TaskAction.Verify);
+
+                NidaqReader = new AnalogMultiChannelReader(AnalogInTask.Stream);
+                NidaqReader.SynchronizeCallbacks = true;
+
+                AnalogInCallback = new AsyncCallback(AnalogIn_Callback);
+                NidaqReader.BeginReadWaveform(1, AnalogInCallback, AnalogInTask);
+
+                runningTask = AnalogInTask;
+
+                NidaqFile = new FileStream(TestPath_Nidaq, FileMode.Append);
+                NidaqStream = new StreamWriter(NidaqFile);
+
+                SettingsChanged();
+                NidaqPrepare.IsEnabled = false;
+            }
+            else
+            {
+                MessageBox.Show("Need to select at least one NI channel");
+            }
+
+        }
+     
+        /// <summary>
+        /// Device selection box callback
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void DevBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+
+            string DevSelection = DevBox.SelectedItem.ToString();
+            Console.WriteLine(DevSelection);
+            string[] ChannelList = DaqSystem.Local.LoadDevice(DevSelection).AIPhysicalChannels;
+            string[] TerminalList = Enum.GetNames(typeof(AITerminalConfiguration));
+            string[] UnitsList = Enum.GetNames(typeof(AIVoltageUnits));
+
+            foreach (var Channel in ChannelList)
+            {
+                Console.WriteLine(Channel);
+                aiChannelList.Items.Add(Channel);
+            }
+
+            foreach (var TerminalConfig in TerminalList)
+            {
+                TerminalConfigBox.Items.Add(TerminalConfig);
+            }
+
+            MaxRate = DaqSystem.Local.LoadDevice(DevSelection).AIMaximumMultiChannelRate;
+
+        }
+
+        /// <summary>
+        /// Sampling rate text box callback
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        void SamplingRateBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            try
+            {
+                SamplingRate = Convert.ToDouble(SamplingRateBox.Text.ToString());
+            }
+            catch
+            {
+                ;
+            }
+
+            SettingsChanged();
+        }
+
+        /// <summary>
+        /// Terminal configuration box callback
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        void TerminalConfigBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            try
+            {
+                MyTerminalConfig = (AITerminalConfiguration)Enum.Parse(typeof(AITerminalConfiguration), TerminalConfigBox.SelectedItem.ToString(), true);
+            }
+            catch
+            {
+                ;
+            }
+
+            // check to see if we've selected dev and channels
+        }
+
+        /// <summary>
+        /// Directory selection callback
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        void SelectDirectory_Click(object sender, RoutedEventArgs e)
+        {
+            CommonOpenFileDialog dialog = new CommonOpenFileDialog();
+            dialog.IsFolderPicker = true;
+            if (dialog.ShowDialog() == CommonFileDialogResult.Ok)
+            {
+                SaveFolder = dialog.FileName;
+                FolderName.Text = SaveFolder;
+
+                TestPath_ColorTs = Path.Combine(SaveFolder,"testing_color_ts.txt");
+                TestPath_ColorVid = Path.Combine(SaveFolder, "testing_color_vid.mp4");
+                TestPath_DepthTs = Path.Combine(SaveFolder, "testing_depth_ts.txt");
+                TestPath_Nidaq = Path.Combine(SaveFolder,"testing_nidaq.txt");
+                TestPath_Timing = Path.Combine(SaveFolder, "testing_timing_calibration.txt");
+
+                SettingsChanged();
+            }
+        }
+
+        /// <summary>
+        /// Check if settings are valid
+        /// </summary>
+        private void SettingsChanged()
+        {
+            // check sampling rate and recording configuration in general
+            Boolean FolderFlag = Directory.Exists(SaveFolder);
+            Boolean SamplingFlag = (SamplingRate > 0 && SamplingRate < MaxRate);
+
+            if (FolderFlag && SamplingFlag )
+            {
+                if (NidaqPrepare.IsEnabled)
+                {
+                    StartButton.IsEnabled = true;
+                }
+                else
+                {
+                    NidaqPrepare.IsEnabled = true;
+                    StartButton.IsEnabled = false;
+                }
+            }
+            else
+            {
+                NidaqPrepare.IsEnabled = false;
+                StartButton.IsEnabled = false;
+            }
+
+        }
+
+        /// <summary>
+        /// Updates status bars
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void CheckTimer_Tick(object sender, EventArgs e)
+        {
+            // FreeMem in GB
+            if (Directory.Exists(SaveFolder))
+            {
+                FileInfo PathInfo = new FileInfo(SaveFolder);
+                DriveInfo SaveDrive = new DriveInfo(PathInfo.Directory.Root.FullName);
+                Double FreeMem = SaveDrive.AvailableFreeSpace / 1e9;
+                Double AllMem = SaveDrive.TotalSize / 1e9;
+                StatusBarFreeSpace.Text = String.Format("{0} {1:0.##} / {2:0.##} GB Free", SaveFolder, FreeMem, AllMem);
+            }
+            
+            // Check Buffers?
+
+            string CPUPercent= "CPU "+CPUPerformance.NextValue()+"%";
+            string RAMUsage = "RAM "+RAMPerformance.NextValue().ToString()+"MB";
+            double MemUsed = GC.GetTotalMemory(true) / 1e9;
+
+            StatusBarCPU.Text = CPUPercent;
+            StatusBarRAM.Text = RAMUsage;
+
+
+        }
     }
 
 }

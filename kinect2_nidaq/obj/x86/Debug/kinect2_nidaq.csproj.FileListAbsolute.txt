@@ -19,3 +19,7 @@ C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_ni
 C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\x86\Debug\kinect2_nidaq.pdb
 C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\x86\Debug\AForge.Video.FFMPEG.pdb
 C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\obj\x86\Debug\kinect2_nidaq.csprojResolveAssemblyReference.cache
+C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\x86\Debug\Microsoft.WindowsAPICodePack.dll
+C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\x86\Debug\Microsoft.WindowsAPICodePack.Shell.dll
+C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\x86\Debug\Microsoft.WindowsAPICodePack.xml
+C:\Users\dattalab\Documents\Visual Studio 2015\Projects\kinect2_nidaq\kinect2_nidaq\bin\x86\Debug\Microsoft.WindowsAPICodePack.Shell.xml

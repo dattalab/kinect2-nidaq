@@ -10,22 +10,130 @@
         Width="1046.213"
         Loaded="Window_Loaded"
         ResizeMode="NoResize">
-    <Grid 
-        Height="424"
-        Margin="0,12,0,0"
-        VerticalAlignment="Top">
-        <Image
-            x:Name="ColorDisplay"
-            Height="424"
-            Width="512"
-            Stretch="UniformToFill"
-            VerticalAlignment="Top"
-            HorizontalAlignment="Left"/>
-        <Image x:Name="DepthDisplay"
-               HorizontalAlignment="Right"
-               Height="424"
-               Width="512"
-               Stretch="UniformToFill"
-               VerticalAlignment="Top" Grid.ColumnSpan="2"/>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="30" />
+        </Grid.RowDefinitions>
+        <TabControl Grid.Row="0">
+            <TabItem Header="Session Settings">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="20" />
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="20" />
+                        <ColumnDefinition Width="200" />
+                        <ColumnDefinition Width="20" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="20" />
+                    </Grid.ColumnDefinitions>
+                    <Grid Grid.Column="1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="30" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="30" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="30" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="30"/>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="30" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="30" />
+                            <RowDefinition Height="10" />
+                        </Grid.RowDefinitions>
+                        <TextBox Text="Device" Grid.Row="1" TextAlignment="Center" VerticalAlignment="Bottom"/>
+                        <ComboBox Name="DevBox" SelectionChanged="DevBox_SelectionChanged" Grid.Row="2" />
+                        <TextBox Text="Terminal Configuration" Grid.Row="3" TextAlignment="Center" VerticalAlignment="Bottom"/>
+                        <ComboBox Name="TerminalConfigBox" SelectionChanged="TerminalConfigBox_SelectionChanged" Grid.Row="4" />
+                        <TextBox Text="Sampling Rate" Grid.Row="5" TextAlignment="Center" VerticalAlignment="Bottom" />
+                        <TextBox Name="SamplingRateBox" TextChanged="SamplingRateBox_TextChanged" Grid.Row="6" />
+                        <Button Content="Prepare NIDaq" Name="NidaqPrepare" Click="NidaqPrepare_Click" Grid.Row="8" IsEnabled="False" />
+                        <Button Content="Start Session"  Name="StartButton" Click="StartButton_Click"  Grid.Row="10" IsEnabled="False" />
+                    </Grid>
+                    <Grid Grid.Column="3">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="10" />
+                            <RowDefinition Height="20" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="10" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Channel Selection" TextAlignment="Center" VerticalAlignment="Bottom" Grid.Row="1" />
+                        <ListBox Name="aiChannelList" SelectionMode="Multiple" Grid.Row="2" />
+                    </Grid>
+                    <Grid Grid.Column="5">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="30" />
+                            <RowDefinition Height="10" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="15" />
+                            <ColumnDefinition Width="*" MinWidth="112" />
+                        </Grid.ColumnDefinitions>
+                        <Button Content="..." HorizontalAlignment="Left"  x:Name="StartButton_Copy" Click="SelectDirectory_Click" Grid.Column="0" Grid.Row="1"/>
+                        <TextBox Name="FolderName" Grid.Column="1" Grid.Row="1" />
+                    </Grid>
+                </Grid>
+            </TabItem>
+            <TabItem Header="Kinect Preview">
+                <Grid>
+                    <Image
+                        x:Name="ColorDisplay"
+                        Height="424"
+                        Width="512"
+                        Stretch="UniformToFill"
+                        VerticalAlignment="Top"
+                        HorizontalAlignment="Left"/>
+                    <Image x:Name="DepthDisplay"
+                       HorizontalAlignment="Right"
+                       Height="424"
+                       Width="512"
+                       Stretch="UniformToFill"
+                       VerticalAlignment="Top"/>
+                </Grid>
+            </TabItem>
+        </TabControl>
+        <Grid Grid.Row="1">
+            <StatusBar>
+                <StatusBar.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="95" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="150" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="400" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="200" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                        </Grid>
+                    </ItemsPanelTemplate>
+                </StatusBar.ItemsPanel>
+                <StatusBarItem Grid.Column="0">
+                    <ProgressBar Value="0" Width="85" Height="16" Name="StatusBarColor" />
+                </StatusBarItem>
+                <Separator Grid.Column="1" />
+                <StatusBarItem Grid.Column="2">
+                    <TextBlock Name="StatusBarFilename" />
+                </StatusBarItem>
+                <Separator Grid.Column="3" />
+                <StatusBarItem Grid.Column="4">
+                    <TextBlock Name="StatusBarFreeSpace" />
+                </StatusBarItem>
+                <Separator Grid.Column="5" />
+                <StatusBarItem Grid.Column="6">
+                    <TextBlock Name="StatusBarRAM" />
+                </StatusBarItem>
+                <Separator Grid.Column="7" />
+                <StatusBarItem Grid.Column="8">
+                    <TextBlock Name="StatusBarCPU" />
+                </StatusBarItem>
+            </StatusBar>
+        </Grid>
     </Grid>
 </Window>
