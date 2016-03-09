@@ -17,7 +17,7 @@ using Microsoft.WindowsAPICodePack.Dialogs;
 
 // TODO 1: Add settings for session name/animal name/notes field
 // TODO 2: Save UI settings (custom settings?)
-// TODO 3: Make sure we exit gracefully if start button has not been clicked
+// TODO 3: Make sure we exit gracefully if start button has not been clicked (without the use of try/catch)
 
 namespace kinect2_nidaq
 {
