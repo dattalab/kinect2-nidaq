@@ -14,10 +14,12 @@ using NationalInstruments;
 using NationalInstruments.DAQmx;
 using AForge.Video.FFMPEG;
 using Microsoft.WindowsAPICodePack.Dialogs;
-
+using Newtonsoft.Json;
+using Metadata;
 // TODO 1: Add settings for session name/animal name/notes field
 // TODO 2: Save UI settings (custom settings?)
 // TODO 3: Make sure we exit gracefully if start button has not been clicked (without the use of try/catch)
+// TODO 4: Control sync signal in software?
 
 namespace kinect2_nidaq
 {
@@ -31,6 +33,7 @@ namespace kinect2_nidaq
         /// Kinect Sensor
         /// </summary>
         KinectSensor sensor;
+
 
         /// <summary>
         /// Color frame Reader
@@ -142,14 +145,17 @@ namespace kinect2_nidaq
         /// </summary>
         private int DepthFramesDropped;
 
+        private kMetadata fMetadata = new kMetadata();
 
         /// <summary>
         /// Directory initialization
         /// </summary>
-        private string TestPath_ColorTs;
-        private string TestPath_ColorVid;
-        private string TestPath_DepthTs;
-        private string TestPath_Nidaq;
+        private string FilePath_ColorTs;
+        private string FilePath_ColorVid;
+        private string FilePath_DepthTs;
+        private string FilePath_Nidaq;
+        private string FilePath_DepthVid;
+        private string FilePath_Metadata;
 
         /// <summary>
         /// Terminal configuration
@@ -185,6 +191,9 @@ namespace kinect2_nidaq
         private StreamWriter ColorTSStream;
         private StreamWriter DepthTSStream;
 
+        private FileStream DepthVidFile;
+        private BinaryWriter DepthVidStream;
+
         private ColorFrameEventArgs colorEventArgs;
         private DepthFrameEventArgs depthEventArgs;
 
@@ -195,6 +204,7 @@ namespace kinect2_nidaq
         /// Buffer timeout
         /// </summary>
         TimeSpan timeout = new TimeSpan(100000);
+        
 
         public MainWindow()
         {
@@ -217,12 +227,19 @@ namespace kinect2_nidaq
                
                 // get all channels...
 
+                // Load up defaults using settings...
+
                 string[] deviceList = DaqSystem.Local.Devices;
                 foreach (string currentDevice in deviceList)
                 {
                     DevBox.Items.Add(currentDevice.ToString());
                 }
-                
+
+                if (DevBox.Items.Count > 0)
+                {
+                    DevBox.SelectedIndex = 0;
+                    TerminalConfigBox.SelectedIndex = 0;
+                }
                 CPUPerformance = new PerformanceCounter();
                 RAMPerformance = new PerformanceCounter("Memory","Available MBytes");
 
@@ -242,7 +259,8 @@ namespace kinect2_nidaq
             }
             else
             {
-                ;
+               MessageBox.Show("No Kinect found");
+               
             }  
 
         }
@@ -257,11 +275,14 @@ namespace kinect2_nidaq
             ColorFrameQueue = new BlockingCollection<ColorFrameEventArgs>(Constants.kMaxFrames);
             DepthFrameQueue = new BlockingCollection<DepthFrameEventArgs>(Constants.kMaxFrames);
            
-            ColorTSFile = new FileStream(TestPath_ColorTs, FileMode.Append);
+            ColorTSFile = new FileStream(FilePath_ColorTs, FileMode.Append);
             ColorTSStream = new StreamWriter(ColorTSFile);
 
-            DepthTSFile = new FileStream(TestPath_DepthTs, FileMode.Append);
+            DepthTSFile = new FileStream(FilePath_DepthTs, FileMode.Append);
             DepthTSStream = new StreamWriter(DepthTSFile);
+
+            DepthVidFile = new FileStream(FilePath_DepthVid, FileMode.Append);
+            DepthVidStream = new BinaryWriter(DepthVidFile);
 
             // Open the Kinect
 
@@ -270,7 +291,7 @@ namespace kinect2_nidaq
 
             ColorReader.FrameArrived += ColorReader_FrameArrived;
             DepthReader.FrameArrived += DepthReader_FrameArrived;
-
+            
             // Display code
 
             
@@ -290,6 +311,36 @@ namespace kinect2_nidaq
             sensor.Open();
             StopButton.IsEnabled = true;
 
+            WriteMetadata();
+
+            
+        }
+
+        private void WriteMetadata()
+        {
+            fMetadata.ColorResolution = new int[2] { Constants.kDefaultFrameWidth, Constants.kDefaultFrameHeight };
+            fMetadata.DepthResolution = fMetadata.ColorResolution;
+            fMetadata.NidaqChannels = aiChannelList.SelectedItems.Count;
+            fMetadata.NidaqTerminalConfiguration = TerminalConfigBox.SelectedItem.ToString();
+            fMetadata.SubjectName = SubjectName.Text;
+            fMetadata.SessionName = SessionName.Text;
+            fMetadata.NidaqChannelNames = new string[aiChannelList.SelectedItems.Count];
+
+            for (int i = 0; i < aiChannelList.SelectedItems.Count; i++)
+            {
+                fMetadata.NidaqChannelNames[i] = aiChannelList.SelectedItems[i].ToString();
+            }
+
+            fMetadata.StartTime = DateTime.Now;
+
+            JsonSerializer serializer = new JsonSerializer();
+            serializer.NullValueHandling = NullValueHandling.Ignore;
+
+            using (StreamWriter sw = new StreamWriter(FilePath_Metadata))
+            using (JsonWriter writer = new JsonTextWriter(sw))
+            {
+                serializer.Serialize(writer,fMetadata);
+            }
         }
 
         /// <summary>
@@ -300,10 +351,13 @@ namespace kinect2_nidaq
         private void Window_Closed(object sender, EventArgs e)
         {
             // Dispose of the Kinect and the readers
+            
+            kinect2_nidaq.Properties.Settings.Default.Save();
 
             sensor.Close();
             ImageTimer.Stop();
-            CheckTimer.Stop();
+            
+            //CheckTimer.Stop();
 
             if (runningTask != null)
             {
@@ -538,7 +592,7 @@ namespace kinect2_nidaq
                 {
                     if (!VideoWriter.IsOpen)
                     {
-                        VideoWriter.Open(TestPath_ColorVid, Constants.kDefaultFrameWidth, Constants.kDefaultFrameHeight);
+                        VideoWriter.Open(FilePath_ColorVid, Constants.kDefaultFrameWidth, Constants.kDefaultFrameHeight);
                     }
                     ColorTSStream.WriteLine(String.Format("{0} {1}", colorData.RelativeTime.TotalMilliseconds, colorData.TimeStamp));
                     VideoWriter.WriteVideoFrame(colorData.ToBitmap().ToSystemBitmap());
@@ -559,6 +613,10 @@ namespace kinect2_nidaq
                 while (DepthFrameQueue.TryTake(out depthData, timeout))
                 {
                     DepthTSStream.WriteLine(String.Format("{0} {1}", depthData.RelativeTime.TotalMilliseconds, depthData.TimeStamp));
+                    foreach (ushort depthDatum in depthData.DepthData)
+                    {
+                        DepthVidStream.Write(depthDatum);
+                    }
                 }
             }
           
@@ -623,12 +681,13 @@ namespace kinect2_nidaq
         {
             if (runningTask == null && aiChannelList.SelectedItems.Count>0)
             {
-
+                
+                MyTerminalConfig = (AITerminalConfiguration)Enum.Parse(typeof(AITerminalConfiguration), TerminalConfigBox.SelectedItem.ToString(), true);
                 AnalogInTask = new NationalInstruments.DAQmx.Task();
                 NidaqDump = new NidaqData();
                 string ChannelString = "";
                 NidaqQueue = new BlockingCollection<AnalogWaveform<double>[]>(Constants.nMaxBuffer);
-                NidaqFile = new FileStream(TestPath_Nidaq, FileMode.Append);
+                NidaqFile = new FileStream(FilePath_Nidaq, FileMode.Append);
                 NidaqStream = new StreamWriter(NidaqFile);
 
                 foreach (var Channel in aiChannelList.SelectedItems)
@@ -702,37 +761,9 @@ namespace kinect2_nidaq
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        void SamplingRateBox_TextChanged(object sender, TextChangedEventArgs e)
+        private void SamplingRateBox_TextChanged(object sender, TextChangedEventArgs e)
         {
-            try
-            {
-                SamplingRate = Convert.ToDouble(SamplingRateBox.Text.ToString());
-            }
-            catch
-            {
-                ;
-            }
-
             SettingsChanged();
-        }
-
-        /// <summary>
-        /// Terminal configuration box callback
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        void TerminalConfigBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            try
-            {
-                MyTerminalConfig = (AITerminalConfiguration)Enum.Parse(typeof(AITerminalConfiguration), TerminalConfigBox.SelectedItem.ToString(), true);
-            }
-            catch
-            {
-                ;
-            }
-
-            // check to see if we've selected dev and channels
         }
 
         /// <summary>
@@ -740,22 +771,31 @@ namespace kinect2_nidaq
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        void SelectDirectory_Click(object sender, RoutedEventArgs e)
+        private void SelectDirectory_Click(object sender, RoutedEventArgs e)
         {
             CommonOpenFileDialog dialog = new CommonOpenFileDialog();
             dialog.IsFolderPicker = true;
             if (dialog.ShowDialog() == CommonFileDialogResult.Ok)
             {
-                SaveFolder = dialog.FileName;
-                FolderName.Text = SaveFolder;
-
-                TestPath_ColorTs = Path.Combine(SaveFolder,"testing_color_ts.txt");
-                TestPath_ColorVid = Path.Combine(SaveFolder, "testing_color_vid.mp4");
-                TestPath_DepthTs = Path.Combine(SaveFolder, "testing_depth_ts.txt");
-                TestPath_Nidaq = Path.Combine(SaveFolder,"testing_nidaq.txt");
-
+                kinect2_nidaq.Properties.Settings.Default.FolderName = FolderName.Text;
+                FolderName.Text = dialog.FileName;
                 SettingsChanged();
             }
+        }
+
+        private void FolderName_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            SettingsChanged();
+        }
+
+        private void SubjectName_TextChanged(object sender, TextChangedEventArgs e) 
+        {
+            SettingsChanged();
+        }
+
+        private void SessionName_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            SettingsChanged();
         }
 
         /// <summary>
@@ -764,21 +804,49 @@ namespace kinect2_nidaq
         private void SettingsChanged()
         {
             // check sampling rate and recording configuration in general
-            Boolean FolderFlag = Directory.Exists(SaveFolder);
-            Boolean SamplingFlag = (SamplingRate > 0 && SamplingRate < MaxRate);
 
-            if (FolderFlag && SamplingFlag )
-            {
-                NidaqPrepare.IsEnabled = true;
-                StartButton.IsEnabled = false;
-                
-            }
-            else
-            {
-                NidaqPrepare.IsEnabled = false;
-                StartButton.IsEnabled = false;
-            }
+            // set up the files and folders, if any exist do not give the user the chance to start the session...
 
+            try
+            {
+                SamplingRate = Convert.ToDouble(SamplingRateBox.Text.ToString());
+                SaveFolder = FolderName.Text;
+
+                if (SessionName.Text.Length > 0 && SubjectName.Text.Length > 0 && SaveFolder != null)
+                {
+
+                    string prefix = String.Format("{0}_{1}", SessionName.Text, SubjectName.Text);
+                    FilePath_ColorTs = Path.Combine(SaveFolder, String.Format("{0}_{1}", prefix, "color_ts.txt"));
+                    FilePath_ColorVid = Path.Combine(SaveFolder, String.Format("{0}_{1}", prefix, "color_vid.mp4"));
+                    FilePath_DepthTs = Path.Combine(SaveFolder, String.Format("{0}_{1}", prefix, "depth_ts.txt"));
+                    FilePath_DepthVid = Path.Combine(SaveFolder, String.Format("{0}_{1}", prefix, "depth_vid.dat"));
+                    FilePath_Nidaq = Path.Combine(SaveFolder, String.Format("{0}_{1}", prefix, "nidaq.txt"));
+                    FilePath_Metadata = Path.Combine(SaveFolder, String.Format("{0}_{1}", prefix, "metadata.json"));
+
+                    if (!File.Exists(FilePath_ColorTs) && !File.Exists(FilePath_ColorVid) && !File.Exists(FilePath_DepthTs)
+                        && !File.Exists(FilePath_DepthVid) && !File.Exists(FilePath_Nidaq) && (SamplingRate > 0 && SamplingRate < MaxRate)
+                        && Directory.Exists(SaveFolder) && aiChannelList.SelectedItems.Count > 0)
+                    {
+                        NidaqPrepare.IsEnabled = true;
+                        StartButton.IsEnabled = false;
+                    }
+                    else
+                    {
+                        NidaqPrepare.IsEnabled = false;
+                        StartButton.IsEnabled = false;
+                    }
+
+                }
+            }
+            catch
+            {
+                ;
+            }
+        }
+
+        private void ChannelSelection_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            SettingsChanged();
         }
 
         /// <summary>
@@ -802,11 +870,10 @@ namespace kinect2_nidaq
 
             string CPUPercent= "CPU "+CPUPerformance.NextValue()+"%";
             string RAMUsage = "RAM "+RAMPerformance.NextValue().ToString()+"MB";
-            double MemUsed = GC.GetTotalMemory(true) / 1e9;
+            double MemUsed = GC.GetTotalMemory(true) / 1e6;
 
             StatusBarCPU.Text = CPUPercent;
-            StatusBarRAM.Text = "RAM Usage "+MemUsed.ToString()+"GB";
-
+            StatusBarRAM.Text = "RAM Usage "+MemUsed.ToString()+"MB";
 
         }
 
