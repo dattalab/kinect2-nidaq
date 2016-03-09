@@ -250,8 +250,6 @@ namespace kinect2_nidaq
         {
             fColorSpacepoints = null;
 
-            
-
             ColorFramesDropped = 0;
             DepthFramesDropped = 0;
 
@@ -271,8 +269,6 @@ namespace kinect2_nidaq
 
             ColorReader.FrameArrived += ColorReader_FrameArrived;
             DepthReader.FrameArrived += DepthReader_FrameArrived;
-
-            // Open the NiDAQ, set up timer
 
             // Display code
 
@@ -314,7 +310,7 @@ namespace kinect2_nidaq
                 AnalogInTask.Stop();
                 AnalogInTask.Dispose();
             }
-            
+
             ColorFrameQueue.CompleteAdding();
             DepthFrameQueue.CompleteAdding();
             NidaqQueue.CompleteAdding();
