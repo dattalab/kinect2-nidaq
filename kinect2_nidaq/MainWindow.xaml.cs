@@ -15,6 +15,9 @@ using NationalInstruments.DAQmx;
 using AForge.Video.FFMPEG;
 using Microsoft.WindowsAPICodePack.Dialogs;
 
+// TODO 1: Add settings for session name/animal name/notes field
+// TODO 2: Save UI settings (custom settings?)
+
 namespace kinect2_nidaq
 {
     /// <summary>
@@ -41,7 +44,7 @@ namespace kinect2_nidaq
         /// <summary>
         /// Map from depth to color
         /// </summary>
-        ColorSpacePoint[] fColorSpacepoints = null;
+        ColorSpacePoint[] fColorSpacepoints;
 
         /// <summary>
         /// For color frame display
@@ -76,7 +79,7 @@ namespace kinect2_nidaq
         /// <summary>
         /// Class for storing national instruments data
         /// </summary>
-        NidaqData NidaqDump = new NidaqData();
+        NidaqData NidaqDump;
         
         /// <summary>
         /// National Instruments callback
@@ -93,36 +96,26 @@ namespace kinect2_nidaq
         PerformanceCounter RAMPerformance;
 
         /// <summary>
-        /// Common timestamp
-        /// </summary>
-        Stopwatch StampingWatch;
-
-        /// <summary>
         /// Queue for color frames
         /// </summary>
-        BlockingCollection<ColorFrameEventArgs> ColorFrameQueue = new BlockingCollection<ColorFrameEventArgs>(Constants.kMaxFrames);
+        BlockingCollection<ColorFrameEventArgs> ColorFrameQueue;
 
         /// <summary>
         /// Queue for depth frames
         /// </summary>
-        BlockingCollection<DepthFrameEventArgs> DepthFrameQueue = new BlockingCollection<DepthFrameEventArgs>(Constants.kMaxFrames);
+        BlockingCollection<DepthFrameEventArgs> DepthFrameQueue;
 
         /// <summary>
         /// Queue for National Instruments data
         /// </summary>
-        BlockingCollection<AnalogWaveform<double>[]> NidaqQueue = new BlockingCollection<AnalogWaveform<double>[]>(Constants.nMaxBuffer);
+        BlockingCollection<AnalogWaveform<double>[]> NidaqQueue;
        
 
         /// <summary>
         /// For writing out color video files
         /// </summary>
         VideoFileWriter VideoWriter = new VideoFileWriter();
-        
-        /// <summary>
-        /// Video timestamp
-        /// </summary>
-        TimeSpan VideoWriterInitialTimeSpan;
-
+      
         /// <summary>
         /// Color queue dump
         /// </summary>
@@ -141,12 +134,12 @@ namespace kinect2_nidaq
         /// <summary>
         /// How many color frames dropped?
         /// </summary>
-        private int ColorFramesDropped = 0;
+        private int ColorFramesDropped;
         
         /// <summary>
         /// How many depth frames dropped?
         /// </summary>
-        private int DepthFramesDropped = 0;
+        private int DepthFramesDropped;
 
 
         /// <summary>
@@ -156,7 +149,6 @@ namespace kinect2_nidaq
         private string TestPath_ColorVid;
         private string TestPath_DepthTs;
         private string TestPath_Nidaq;
-        private string TestPath_Timing;
 
         /// <summary>
         /// Terminal configuration
@@ -192,9 +184,15 @@ namespace kinect2_nidaq
         private StreamWriter ColorTSStream;
         private StreamWriter DepthTSStream;
 
+        private ColorFrameEventArgs colorEventArgs;
+        private DepthFrameEventArgs depthEventArgs;
 
-        // write out metadata...
+        NationalInstruments.PrecisionDateTime[] CurrentNITimeStamp;
+        CancellationTokenSource fCancellationTokenSource = new CancellationTokenSource();
 
+        /// <summary>
+        /// Buffer timeout
+        /// </summary>
         TimeSpan timeout = new TimeSpan(100000);
 
         public MainWindow()
@@ -214,13 +212,8 @@ namespace kinect2_nidaq
 
             if (sensor != null)
             {
-                sensor.Open();
-
-                // Start the time stamper
-
-                StampingWatch = new Stopwatch();
-                StampingWatch.Start();
-
+               
+               
                 // get all channels...
 
                 string[] deviceList = DaqSystem.Local.Devices;
@@ -236,6 +229,14 @@ namespace kinect2_nidaq
                 CPUPerformance.CounterName = "% Processor Time";
                 CPUPerformance.InstanceName = "_Total";
 
+                ImageTimer = new DispatcherTimer();
+                ImageTimer.Interval = TimeSpan.FromMilliseconds(50.0);
+                ImageTimer.Tick += ImageTimer_Tick;
+
+                CheckTimer = new DispatcherTimer();
+                CheckTimer.Interval = TimeSpan.FromMilliseconds(1000);
+                CheckTimer.Tick += CheckTimer_Tick;
+            
 
             }
             else
@@ -247,7 +248,22 @@ namespace kinect2_nidaq
 
         private void StartButton_Click(object sender, RoutedEventArgs e)
         {
+            fColorSpacepoints = null;
+
             
+
+            ColorFramesDropped = 0;
+            DepthFramesDropped = 0;
+
+            ColorFrameQueue = new BlockingCollection<ColorFrameEventArgs>(Constants.kMaxFrames);
+            DepthFrameQueue = new BlockingCollection<DepthFrameEventArgs>(Constants.kMaxFrames);
+           
+            ColorTSFile = new FileStream(TestPath_ColorTs, FileMode.Append);
+            ColorTSStream = new StreamWriter(ColorTSFile);
+
+            DepthTSFile = new FileStream(TestPath_DepthTs, FileMode.Append);
+            DepthTSStream = new StreamWriter(DepthTSFile);
+
             // Open the Kinect
 
             ColorReader = sensor.ColorFrameSource.OpenReader();
@@ -260,32 +276,22 @@ namespace kinect2_nidaq
 
             // Display code
 
-            ImageTimer = new DispatcherTimer();
-            ImageTimer.Interval = TimeSpan.FromMilliseconds(50.0);
-            ImageTimer.Tick += ImageTimer_Tick;
+            
             ImageTimer.Start();
 
             // HD check
 
-            Console.WriteLine("{0}", Directory.GetDirectoryRoot(SaveFolder));
-            CheckTimer = new DispatcherTimer();
-            CheckTimer.Interval = TimeSpan.FromMilliseconds(2000);
-            CheckTimer.Tick += CheckTimer_Tick;
             CheckTimer.Start();
 
             // Start the tasks that empty each queue
 
-            ColorDumpTask = System.Threading.Tasks.Task.Factory.StartNew(ColorRunner, TaskCreationOptions.LongRunning);
-            DepthDumpTask = System.Threading.Tasks.Task.Factory.StartNew(DepthRunner, TaskCreationOptions.LongRunning);
-            NidaqDumpTask = System.Threading.Tasks.Task.Factory.StartNew(NidaqRunner, TaskCreationOptions.LongRunning);
+            ColorDumpTask = System.Threading.Tasks.Task.Factory.StartNew(ColorRunner, fCancellationTokenSource.Token);
+            DepthDumpTask = System.Threading.Tasks.Task.Factory.StartNew(DepthRunner, fCancellationTokenSource.Token);
+            NidaqDumpTask = System.Threading.Tasks.Task.Factory.StartNew(NidaqRunner, fCancellationTokenSource.Token);
 
-            StartButton.IsEnabled = false;
-
-            ColorTSFile = new FileStream(TestPath_ColorTs, FileMode.Append);
-            ColorTSStream = new StreamWriter(ColorTSFile);
-            
-            DepthTSFile = new FileStream(TestPath_DepthTs, FileMode.Append);
-            DepthTSStream = new StreamWriter(DepthTSFile);
+            StartButton.IsEnabled = false;           
+            sensor.Open();
+            StopButton.IsEnabled = true;
 
         }
 
@@ -298,21 +304,17 @@ namespace kinect2_nidaq
         {
             // Dispose of the Kinect and the readers
 
-            if (ColorReader != null)
-            {
-                ColorReader.Dispose();
-            }
+            sensor.Close();
+            ImageTimer.Stop();
+            CheckTimer.Stop();
 
-            if (DepthReader != null)
+            if (runningTask != null)
             {
-                DepthReader.Dispose();
+                runningTask = null;
+                AnalogInTask.Stop();
+                AnalogInTask.Dispose();
             }
-
-            if (sensor != null)
-            {
-                sensor.Close();
-            }
-
+            
             ColorFrameQueue.CompleteAdding();
             DepthFrameQueue.CompleteAdding();
             NidaqQueue.CompleteAdding();
@@ -334,22 +336,34 @@ namespace kinect2_nidaq
                     {
                         ae.Handle((x) =>
                             {
-                                // do something if the task doesn't finish...
+                                Console.WriteLine("Exception finishing task:  {0} {1}\n{2}", x.GetType().ToString(), x.Message, x.StackTrace);
                                 return false;
                             });
                     }
                 }
             }
 
-            // Close out file streams
+            if (VideoWriter.IsOpen)
+            {
+                VideoWriter.Close();
+            }
 
-            NidaqFile.Close();
-            NidaqStream.Close();
-            DepthTSFile.Close();
-            DepthTSStream.Close();
-            ColorTSFile.Close();
-            ColorTSStream.Close();
-
+            try
+            {
+                ColorReader.Dispose();
+                DepthReader.Dispose();
+                NidaqStream.Close();
+                NidaqFile.Close();
+                ColorTSStream.Close();
+                DepthTSStream.Close();
+                DepthDumpTask.Dispose();
+                NidaqDumpTask.Dispose();
+                ColorDumpTask.Dispose();
+            }
+            catch
+            {
+                MessageBox.Show("Could not dispose of all tasks");
+            }
         }
 
         /// <summary>
@@ -365,9 +379,9 @@ namespace kinect2_nidaq
             using (ColorFrame frame = e.FrameReference.AcquireFrame())
             {
                 
-                ColorFrameEventArgs colorEventArgs = new ColorFrameEventArgs();
+                colorEventArgs = new ColorFrameEventArgs();
                 colorEventArgs.RelativeTime = e.FrameReference.RelativeTime;
-                colorEventArgs.TimeStamp = StampingWatch.ElapsedMilliseconds;
+                colorEventArgs.TimeStamp = CurrentNITimeStamp[0].WholeSeconds+CurrentNITimeStamp[0].FractionalSeconds;            
 
                 if (frame == null)
                 {
@@ -400,6 +414,7 @@ namespace kinect2_nidaq
 
                 }
             }
+
         }
 
         /// <summary>
@@ -422,7 +437,7 @@ namespace kinect2_nidaq
             using (DepthFrame frame = e.FrameReference.AcquireFrame())
             {
 
-                DepthFrameEventArgs depthEventArgs = new DepthFrameEventArgs();
+                depthEventArgs = new DepthFrameEventArgs();
 
                 if (frame == null)
                 {
@@ -436,7 +451,8 @@ namespace kinect2_nidaq
                     fColorSpacepoints = new ColorSpacePoint[depthData.Length];
                     sensor.CoordinateMapper.MapDepthFrameToColorSpace(depthData, fColorSpacepoints);
 
-                    depthEventArgs.TimeStamp = StampingWatch.ElapsedMilliseconds;
+                    depthEventArgs.TimeStamp = CurrentNITimeStamp[0].WholeSeconds+CurrentNITimeStamp[0].FractionalSeconds;
+
                     depthEventArgs.DepthData = depthData;
                     depthEventArgs.Height = frame.FrameDescription.Height;
                     depthEventArgs.Width = frame.FrameDescription.Width;
@@ -470,15 +486,19 @@ namespace kinect2_nidaq
 
             if (null != runningTask && runningTask == ar.AsyncState)
             {
-                // read in with waveform data type to get timestamp
+                // read in with waveform data type to get timestamp          
 
                 AnalogWaveform<double>[] Waveforms = NidaqReader.EndReadWaveform(ar);
+
+                // Current NIDAQ timestamp
+
+                CurrentNITimeStamp = Waveforms[0].GetPrecisionTimeStamps();
                 NidaqQueue.Add(Waveforms);
                 NidaqReader.BeginReadWaveform(1, AnalogIn_Callback, AnalogInTask);
-            }
-            
+            }       
         }
 
+        
         /// <summary>
         /// Updates display
         /// </summary>
@@ -503,21 +523,23 @@ namespace kinect2_nidaq
         /// </summary>
         private void ColorRunner()
         {
+
+            TimeSpan timeoutvid = TimeSpan.FromMilliseconds(1000);
+
             while (!ColorFrameQueue.IsCompleted)
             {
                 ColorFrameEventArgs colorData = null;
-                while (ColorFrameQueue.TryTake(out colorData, timeout))
+                while (ColorFrameQueue.TryTake(out colorData, timeoutvid))
                 {
                     if (!VideoWriter.IsOpen)
                     {
-                        VideoWriter.Open(TestPath_ColorVid, 512, 424);
-                        this.VideoWriterInitialTimeSpan = colorData.RelativeTime;
+                        VideoWriter.Open(TestPath_ColorVid, Constants.kDefaultFrameWidth, Constants.kDefaultFrameHeight);
                     }
-                    
                     ColorTSStream.WriteLine(String.Format("{0} {1}", colorData.RelativeTime.TotalMilliseconds, colorData.TimeStamp));
-                    VideoWriter.WriteVideoFrame(colorData.ToBitmap().ToSystemBitmap(), colorData.RelativeTime - this.VideoWriterInitialTimeSpan);
+                    VideoWriter.WriteVideoFrame(colorData.ToBitmap().ToSystemBitmap());
                 }
             }
+           
             
         }
 
@@ -580,7 +602,6 @@ namespace kinect2_nidaq
                         NidaqStream.WriteLine(String.Format("{0} {1}",
                             writestring,
                             (double)timestamps[i].WholeSeconds + timestamps[i].FractionalSeconds));
-
                     }
 
 
@@ -595,14 +616,15 @@ namespace kinect2_nidaq
         /// <param name="e"></param>
         private void NidaqPrepare_Click(object sender, RoutedEventArgs e)
         {
-            AIChannel MyAiChannel;
-
-            AnalogInTask = new NationalInstruments.DAQmx.Task();
-
-            string ChannelString = "";
-
-            if (aiChannelList.SelectedItems.Count > 0)
+            if (runningTask == null && aiChannelList.SelectedItems.Count>0)
             {
+
+                AnalogInTask = new NationalInstruments.DAQmx.Task();
+                NidaqDump = new NidaqData();
+                string ChannelString = "";
+                NidaqQueue = new BlockingCollection<AnalogWaveform<double>[]>(Constants.nMaxBuffer);
+                NidaqFile = new FileStream(TestPath_Nidaq, FileMode.Append);
+                NidaqStream = new StreamWriter(NidaqFile);
 
                 foreach (var Channel in aiChannelList.SelectedItems)
                 {
@@ -610,11 +632,10 @@ namespace kinect2_nidaq
                 }
 
                 ChannelString.Trim(new Char[] { ' ', ',' });
-                Console.WriteLine(ChannelString);
-
+                
                 AnalogInTask.AIChannels.CreateVoltageChannel(
                     ChannelString,
-                    "MyAiChannel",
+                    "",
                     MyTerminalConfig,
                     0,
                     5,
@@ -631,19 +652,17 @@ namespace kinect2_nidaq
 
                 runningTask = AnalogInTask;
 
-                NidaqFile = new FileStream(TestPath_Nidaq, FileMode.Append);
-                NidaqStream = new StreamWriter(NidaqFile);
-
                 SettingsChanged();
                 NidaqPrepare.IsEnabled = false;
+                StartButton.IsEnabled = true;
             }
             else
             {
                 MessageBox.Show("Need to select at least one NI channel");
             }
-
+           
         }
-     
+
         /// <summary>
         /// Device selection box callback
         /// </summary>
@@ -729,7 +748,6 @@ namespace kinect2_nidaq
                 TestPath_ColorVid = Path.Combine(SaveFolder, "testing_color_vid.mp4");
                 TestPath_DepthTs = Path.Combine(SaveFolder, "testing_depth_ts.txt");
                 TestPath_Nidaq = Path.Combine(SaveFolder,"testing_nidaq.txt");
-                TestPath_Timing = Path.Combine(SaveFolder, "testing_timing_calibration.txt");
 
                 SettingsChanged();
             }
@@ -746,15 +764,9 @@ namespace kinect2_nidaq
 
             if (FolderFlag && SamplingFlag )
             {
-                if (NidaqPrepare.IsEnabled)
-                {
-                    StartButton.IsEnabled = true;
-                }
-                else
-                {
-                    NidaqPrepare.IsEnabled = true;
-                    StartButton.IsEnabled = false;
-                }
+                NidaqPrepare.IsEnabled = true;
+                StartButton.IsEnabled = false;
+                
             }
             else
             {
@@ -788,9 +800,15 @@ namespace kinect2_nidaq
             double MemUsed = GC.GetTotalMemory(true) / 1e9;
 
             StatusBarCPU.Text = CPUPercent;
-            StatusBarRAM.Text = RAMUsage;
+            StatusBarRAM.Text = "RAM Usage "+MemUsed.ToString()+"GB";
 
 
+        }
+
+        private void StopButton_Click(object sender, RoutedEventArgs e)
+        {
+            Window_Closed(sender,e);
+            StopButton.IsEnabled = false;
         }
     }
 

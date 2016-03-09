@@ -16,7 +16,7 @@ namespace Sensor
 
         protected int fWidth;
         protected int fHeight;
-        protected long fTimeStamp;
+        protected double fTimeStamp;
 
         /// <summary>
         /// byte array captured from the frame
@@ -64,7 +64,7 @@ namespace Sensor
             }
         }
 
-        public long TimeStamp
+        public double TimeStamp
         {
             get
             {

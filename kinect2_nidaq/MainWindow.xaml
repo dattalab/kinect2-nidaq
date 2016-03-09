@@ -9,7 +9,8 @@
         Height="640.909"
         Width="1046.213"
         Loaded="Window_Loaded"
-        ResizeMode="NoResize">
+        ResizeMode="NoResize"
+        Closed="Window_Closed">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -41,6 +42,8 @@
                             <RowDefinition Height="30" />
                             <RowDefinition Height="*" />
                             <RowDefinition Height="30" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="30" />
                             <RowDefinition Height="10" />
                         </Grid.RowDefinitions>
                         <TextBox Text="Device" Grid.Row="1" TextAlignment="Center" VerticalAlignment="Bottom"/>
@@ -51,6 +54,7 @@
                         <TextBox Name="SamplingRateBox" TextChanged="SamplingRateBox_TextChanged" Grid.Row="6" />
                         <Button Content="Prepare NIDaq" Name="NidaqPrepare" Click="NidaqPrepare_Click" Grid.Row="8" IsEnabled="False" />
                         <Button Content="Start Session"  Name="StartButton" Click="StartButton_Click"  Grid.Row="10" IsEnabled="False" />
+                        <Button Content="Stop Session" Name="StopButton" Click="StopButton_Click" Grid.Row="12" IsEnabled="False" /> 
                     </Grid>
                     <Grid Grid.Column="3">
                         <Grid.RowDefinitions>
