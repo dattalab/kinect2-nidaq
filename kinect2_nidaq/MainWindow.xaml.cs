@@ -17,6 +17,7 @@ using Microsoft.WindowsAPICodePack.Dialogs;
 
 // TODO 1: Add settings for session name/animal name/notes field
 // TODO 2: Save UI settings (custom settings?)
+// TODO 3: Make sure we exit gracefully if start button has not been clicked
 
 namespace kinect2_nidaq
 {
@@ -311,10 +312,18 @@ namespace kinect2_nidaq
                 AnalogInTask.Dispose();
             }
 
-            ColorFrameQueue.CompleteAdding();
-            DepthFrameQueue.CompleteAdding();
-            NidaqQueue.CompleteAdding();
-            
+            try
+            {
+
+                ColorFrameQueue.CompleteAdding();
+                DepthFrameQueue.CompleteAdding();
+                NidaqQueue.CompleteAdding();
+            }
+            catch
+            {
+                ;
+            }
+
             foreach (System.Threading.Tasks.Task task in new List<System.Threading.Tasks.Task>
             {
                 DepthDumpTask,
@@ -358,7 +367,7 @@ namespace kinect2_nidaq
             }
             catch
             {
-                MessageBox.Show("Could not dispose of all tasks");
+                ;
             }
         }
 
