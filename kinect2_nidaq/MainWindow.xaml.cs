@@ -16,10 +16,10 @@ using AForge.Video.FFMPEG;
 using Microsoft.WindowsAPICodePack.Dialogs;
 using Newtonsoft.Json;
 using Metadata;
-// TODO 1: Add settings for session name/animal name/notes field
-// TODO 2: Save UI settings (custom settings?)
-// TODO 3: Make sure we exit gracefully if start button has not been clicked (without the use of try/catch)
-// TODO 4: Control sync signal in software?
+
+// TODO 1: Make sure we exit gracefully if start button has not been clicked (without the use of try/catch)
+// TODO 2: Control sync signal in software?
+// TODO 3: Add option to create a tarball when the user clicks stop or closes window
 
 namespace kinect2_nidaq
 {
