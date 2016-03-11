@@ -58,5 +58,29 @@ namespace Metadata
             set;
         }
 
+        public Boolean IsLittleEndian
+        {
+            get;
+            set;
+        }
+
+        public String DepthDataType
+        {
+            get;
+            set;
+        }
+
+        public String ColorDataType
+        {
+            get;
+            set;
+        }
+
+        public String NidaqDataType
+        {
+            get;
+            set;
+        }
+
     }
 }

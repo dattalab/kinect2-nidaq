@@ -20,6 +20,7 @@ using Metadata;
 // TODO 1: Make sure we exit gracefully if start button has not been clicked (without the use of try/catch)
 // TODO 2: Control sync signal in software?
 // TODO 3: Add option to create a tarball when the user clicks stop or closes window
+// TODO 4: Make sure we're not being too clever with pre-allocation...
 
 namespace kinect2_nidaq
 {
@@ -197,7 +198,11 @@ namespace kinect2_nidaq
         private ColorFrameEventArgs colorEventArgs;
         private DepthFrameEventArgs depthEventArgs;
 
-        NationalInstruments.PrecisionDateTime[] CurrentNITimeStamp;
+        private AnalogWaveform<double>[] Waveforms;
+
+        NationalInstruments.PrecisionDateTime[] TmpTimeStamp;
+        double CurrentNITimeStamp;
+
         CancellationTokenSource fCancellationTokenSource = new CancellationTokenSource();
 
         /// <summary>
@@ -288,7 +293,7 @@ namespace kinect2_nidaq
 
             ColorReader = sensor.ColorFrameSource.OpenReader();
             DepthReader = sensor.DepthFrameSource.OpenReader();
-
+     
             ColorReader.FrameArrived += ColorReader_FrameArrived;
             DepthReader.FrameArrived += DepthReader_FrameArrived;
             
@@ -310,9 +315,7 @@ namespace kinect2_nidaq
             StartButton.IsEnabled = false;           
             sensor.Open();
             StopButton.IsEnabled = true;
-
             WriteMetadata();
-
             
         }
 
@@ -324,7 +327,22 @@ namespace kinect2_nidaq
             fMetadata.NidaqTerminalConfiguration = TerminalConfigBox.SelectedItem.ToString();
             fMetadata.SubjectName = SubjectName.Text;
             fMetadata.SessionName = SessionName.Text;
+            fMetadata.IsLittleEndian = BitConverter.IsLittleEndian;
             fMetadata.NidaqChannelNames = new string[aiChannelList.SelectedItems.Count];
+            fMetadata.DepthDataType = depthData.GetType().Name;
+            fMetadata.ColorDataType = colorData.GetType().Name;
+            Type t = typeof(NidaqData);
+            System.Reflection.PropertyInfo t2 = t.GetProperty("Data");
+            
+            if (t2 != null)
+            {
+                fMetadata.NidaqDataType = t2.PropertyType.Name;
+            }
+            else
+            {
+                fMetadata.NidaqDataType = null;
+            }
+
 
             for (int i = 0; i < aiChannelList.SelectedItems.Count; i++)
             {
@@ -415,6 +433,7 @@ namespace kinect2_nidaq
                 NidaqFile.Close();
                 ColorTSStream.Close();
                 DepthTSStream.Close();
+                DepthVidStream.Close();
                 DepthDumpTask.Dispose();
                 NidaqDumpTask.Dispose();
                 ColorDumpTask.Dispose();
@@ -439,8 +458,9 @@ namespace kinect2_nidaq
             {
                 
                 colorEventArgs = new ColorFrameEventArgs();
+               
                 colorEventArgs.RelativeTime = e.FrameReference.RelativeTime;
-                colorEventArgs.TimeStamp = CurrentNITimeStamp[0].WholeSeconds+CurrentNITimeStamp[0].FractionalSeconds;            
+                colorEventArgs.TimeStamp = CurrentNITimeStamp;            
 
                 if (frame == null)
                 {
@@ -510,15 +530,12 @@ namespace kinect2_nidaq
                     fColorSpacepoints = new ColorSpacePoint[depthData.Length];
                     sensor.CoordinateMapper.MapDepthFrameToColorSpace(depthData, fColorSpacepoints);
 
-                    depthEventArgs.TimeStamp = CurrentNITimeStamp[0].WholeSeconds+CurrentNITimeStamp[0].FractionalSeconds;
-
+                    depthEventArgs.TimeStamp = CurrentNITimeStamp;
                     depthEventArgs.DepthData = depthData;
                     depthEventArgs.Height = frame.FrameDescription.Height;
                     depthEventArgs.Width = frame.FrameDescription.Width;
                     depthEventArgs.DepthMinReliableDistance = frame.DepthMinReliableDistance;
                     depthEventArgs.DepthMaxReliableDistance = frame.DepthMaxReliableDistance;
-
-                    // update to include absolute timestamps with hi-rest stopwatch
 
                     DepthFrameArrived(depthEventArgs);
 
@@ -547,11 +564,15 @@ namespace kinect2_nidaq
             {
                 // read in with waveform data type to get timestamp          
 
-                AnalogWaveform<double>[] Waveforms = NidaqReader.EndReadWaveform(ar);
-
+                Waveforms = NidaqReader.EndReadWaveform(ar);
+    
                 // Current NIDAQ timestamp
 
-                CurrentNITimeStamp = Waveforms[0].GetPrecisionTimeStamps();
+                TmpTimeStamp= Waveforms[0].GetPrecisionTimeStamps();
+                CurrentNITimeStamp = (double)TmpTimeStamp[0].WholeSeconds + TmpTimeStamp[0].FractionalSeconds;
+                
+                // Guaranteed to be 1
+
                 NidaqQueue.Add(Waveforms);
                 NidaqReader.BeginReadWaveform(1, AnalogIn_Callback, AnalogInTask);
             }       
@@ -689,7 +710,7 @@ namespace kinect2_nidaq
                 NidaqQueue = new BlockingCollection<AnalogWaveform<double>[]>(Constants.nMaxBuffer);
                 NidaqFile = new FileStream(FilePath_Nidaq, FileMode.Append);
                 NidaqStream = new StreamWriter(NidaqFile);
-
+                
                 foreach (var Channel in aiChannelList.SelectedItems)
                 {
                     ChannelString = String.Format("{0} {1},", ChannelString, Channel.ToString());
@@ -705,6 +726,7 @@ namespace kinect2_nidaq
                     5,
                     AIVoltageUnits.Volts);
 
+                
                 AnalogInTask.Timing.ConfigureSampleClock("", SamplingRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, 1);
                 AnalogInTask.Control(TaskAction.Verify);
 
@@ -715,7 +737,6 @@ namespace kinect2_nidaq
                 NidaqReader.BeginReadWaveform(1, AnalogInCallback, AnalogInTask);
 
                 runningTask = AnalogInTask;
-
                 SettingsChanged();
                 NidaqPrepare.IsEnabled = false;
                 StartButton.IsEnabled = true;
@@ -737,6 +758,7 @@ namespace kinect2_nidaq
 
             string DevSelection = DevBox.SelectedItem.ToString();
             Console.WriteLine(DevSelection);
+            
             string[] ChannelList = DaqSystem.Local.LoadDevice(DevSelection).AIPhysicalChannels;
             string[] TerminalList = Enum.GetNames(typeof(AITerminalConfiguration));
             string[] UnitsList = Enum.GetNames(typeof(AIVoltageUnits));
