@@ -34,25 +34,19 @@ namespace Metadata
             set;
         }
 
-        public int[] DepthResolution
-        {
-            get;
-            set;
-        }
-
         public string NidaqTerminalConfiguration
         {
             get;
             set;
         }
 
-        public int[] ColorResolution
+        public String NidaqDataType
         {
             get;
             set;
         }
 
-        public DateTime StartTime
+        public int[] DepthResolution
         {
             get;
             set;
@@ -70,17 +64,31 @@ namespace Metadata
             set;
         }
 
+
+
+        public int[] ColorResolution
+        {
+            get;
+            set;
+        }
+
         public String ColorDataType
         {
             get;
             set;
         }
 
-        public String NidaqDataType
+        public DateTime StartTime
         {
             get;
             set;
         }
+
+
+       
+        
+
+       
 
     }
 }

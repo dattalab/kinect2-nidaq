@@ -13,7 +13,9 @@ namespace Sensor
         public static readonly int kDefaultFrameHeight = 424;
         public static readonly int kDefaultColorFrameWidth = 1920;
         public static readonly int kDefaultColorFrameHeight = 1080;
-        public static readonly int kMaxFrames = 30;
+        public static readonly int kMaxFrames = 10;
         public static readonly int nMaxBuffer = 10000;
+        public static readonly int tUpdateCount = 15;
+        public static readonly int etaMaxBuffer = 15;
     }
 }

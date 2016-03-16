@@ -11,14 +11,25 @@
         Width="1046.213"
         Loaded="Window_Loaded"
         ResizeMode="CanMinimize"
-        Closed="Window_Closed">
+        WindowStyle="None"
+        Closing="Window_Closed">
 
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="30" />
             <RowDefinition Height="*" />
             <RowDefinition Height="30" />
         </Grid.RowDefinitions>
-        <TabControl Grid.Row="0">
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="100" />
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="1" Name="ExitButton" Click="ExitButton_Click" FontSize="18">
+                Exit
+            </Button>
+        </Grid>
+        <TabControl Grid.Row="1">
             <TabItem Header="Session Settings">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -65,7 +76,7 @@
                             <RowDefinition Height="10" />
                         </Grid.RowDefinitions>
                         <TextBlock Text="Channel Selection" TextAlignment="Center" VerticalAlignment="Bottom" Grid.Row="1" />
-                        <ListBox Name="aiChannelList" SelectionMode="Multiple" Grid.Row="2" SelectionChanged="ChannelSelection_Changed" />
+                        <ListBox Name="aiChannelList" SelectionMode="Extended" Grid.Row="2" SelectionChanged="ChannelSelection_Changed" />
                     </Grid>
                     <Grid Grid.Column="5">
                         <Grid.RowDefinitions>
@@ -91,6 +102,22 @@
                         <TextBlock Text="Save Directory" Grid.Column="1" Grid.Row="5" TextAlignment="Center" VerticalAlignment="Bottom" />
                         <Button Content="..." HorizontalAlignment="Left"  x:Name="StartButton_Copy" Click="SelectDirectory_Click" Grid.Column="0" Grid.Row="6"/>
                         <TextBox Name="FolderName" Grid.Column="1" Grid.Row="6" TextChanged="FolderName_TextChanged" Text="{Binding Source={x:Static properties:Settings.Default}, Path=FolderName}" />
+                        <Grid Grid.Row="8" Grid.Column="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <CheckBox VerticalAlignment="Center" Name="CheckDepthStream">
+                                <TextBlock Text="Depth Stream" />
+                            </CheckBox>
+                            <CheckBox VerticalAlignment="Center" Grid.Row="1" Grid.Column="0" Name="CheckColorStream" >
+                                <TextBlock Text="Color Stream" />
+                            </CheckBox>
+                        </Grid>
                     </Grid>
                 </Grid>
             </TabItem>
@@ -112,7 +139,7 @@
                 </Grid>
             </TabItem>
         </TabControl>
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <StatusBar>
                 <StatusBar.ItemsPanel>
                     <ItemsPanelTemplate>
@@ -120,11 +147,13 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="95" />
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="150" />
+                                <ColumnDefinition Width="250" />
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="400" />
+                                <ColumnDefinition Width="95" />
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="200" />
+                                <ColumnDefinition Width="325" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
@@ -132,22 +161,43 @@
                     </ItemsPanelTemplate>
                 </StatusBar.ItemsPanel>
                 <StatusBarItem Grid.Column="0">
-                    <ProgressBar Value="0" Width="85" Height="16" Name="StatusBarColor" />
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <ProgressBar Value="0" Width="85" Height="8" Name="StatusBarColor"/>
+                        <ProgressBar Value="0" Width="85" Height="8" Name="StatusBarDepth" Grid.Row="1" />
+                        <ProgressBar Value="0" Width="85" Height="8" Name="StatusBarNidaq" Grid.Row="2" />
+                    </Grid>
                 </StatusBarItem>
                 <Separator Grid.Column="1" />
                 <StatusBarItem Grid.Column="2">
-                    <TextBlock Name="StatusBarFilename" TextAlignment="Center" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="20" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <ProgressBar Value="0" Width="85" Height="16" Name="StatusBarTar" />
+                        <TextBlock Text="ETA: " Name="StatusBarTarETA" Width="140" Grid.Column="2" />
+                    </Grid>
                 </StatusBarItem>
                 <Separator Grid.Column="3" />
                 <StatusBarItem Grid.Column="4">
-                    <TextBlock Name="StatusBarFreeSpace" TextAlignment="Center"/>
+                    <TextBlock Name="StatusBarFramesDropped" TextAlignment="Center" />
                 </StatusBarItem>
                 <Separator Grid.Column="5" />
                 <StatusBarItem Grid.Column="6">
-                    <TextBlock Name="StatusBarRAM" TextAlignment="Center"/>
+                    <TextBlock Name="StatusBarFreeSpace" TextAlignment="Center"/>
                 </StatusBarItem>
                 <Separator Grid.Column="7" />
                 <StatusBarItem Grid.Column="8">
+                    <TextBlock Name="StatusBarRAM" TextAlignment="Center"/>
+                </StatusBarItem>
+                <Separator Grid.Column="9" />
+                <StatusBarItem Grid.Column="10">
                     <TextBlock Name="StatusBarCPU" TextAlignment="Center" />
                 </StatusBarItem>
             </StatusBar>

@@ -3,9 +3,12 @@ using System.Windows;
 using System.IO;
 using System.Windows.Threading;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Threading.Tasks;
+using System.ComponentModel;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Diagnostics;
 using System.Threading;
 using Microsoft.Kinect;
@@ -16,6 +19,8 @@ using AForge.Video.FFMPEG;
 using Microsoft.WindowsAPICodePack.Dialogs;
 using Newtonsoft.Json;
 using Metadata;
+using ICSharpCode.SharpZipLib.Tar;
+using ICSharpCode.SharpZipLib.GZip;
 
 // TODO 1: Make sure we exit gracefully if start button has not been clicked (without the use of try/catch)
 // TODO 2: Control sync signal in software?
@@ -100,15 +105,20 @@ namespace kinect2_nidaq
         PerformanceCounter CPUPerformance;
         PerformanceCounter RAMPerformance;
 
+        // By default blocking collections use FIFO (ConcurrentQueue), no need to specify
+
         /// <summary>
         /// Queue for color frames
         /// </summary>
-        BlockingCollection<ColorFrameEventArgs> ColorFrameQueue;
+        //ConcurrentQueue<ColorFrameEventArgs> ColorFrameQueue;
+        BlockingCollection<ColorFrameEventArgs> ColorFrameCollection;
 
         /// <summary>
         /// Queue for depth frames
         /// </summary>
-        BlockingCollection<DepthFrameEventArgs> DepthFrameQueue;
+        /// 
+        //ConcurrentQueue<DepthFrameEventArgs> DepthFrameQueue;
+        BlockingCollection<DepthFrameEventArgs> DepthFrameCollection;
 
         /// <summary>
         /// Queue for National Instruments data
@@ -139,12 +149,12 @@ namespace kinect2_nidaq
         /// <summary>
         /// How many color frames dropped?
         /// </summary>
-        private int ColorFramesDropped;
+        private int ColorFramesDropped = 0;
         
         /// <summary>
         /// How many depth frames dropped?
         /// </summary>
-        private int DepthFramesDropped;
+        private int DepthFramesDropped = 0;
 
         private kMetadata fMetadata = new kMetadata();
 
@@ -157,6 +167,17 @@ namespace kinect2_nidaq
         private string FilePath_Nidaq;
         private string FilePath_DepthVid;
         private string FilePath_Metadata;
+        private string FilePath_Tar;
+
+        /// <summary>
+        /// Session flags
+        /// </summary>
+        private bool IsRecordingEnabled = false;
+        private bool IsColorStreamEnabled = false;
+        private bool IsDepthStreamEnabled = false;
+        private bool IsDataCompressed = false;
+        private bool IsSessionClean = false;
+        private bool IsNidaqEnabled = false;
 
         /// <summary>
         /// Terminal configuration
@@ -178,13 +199,14 @@ namespace kinect2_nidaq
         /// </summary>
         private double SamplingRate;
 
+
         /// <summary>
         /// Save folder
         /// </summary>
         private String SaveFolder;
         
         private FileStream NidaqFile;
-        private StreamWriter NidaqStream;
+        private BinaryWriter NidaqStream;
 
         private FileStream ColorTSFile;
         private FileStream DepthTSFile;
@@ -199,6 +221,11 @@ namespace kinect2_nidaq
         private DepthFrameEventArgs depthEventArgs;
 
         private AnalogWaveform<double>[] Waveforms;
+        private BackgroundWorker bgTarball;
+        private AutoResetEvent resetEvent;
+        private List<string> FilePaths;
+        private Queue<double> ETAQueue;
+        
 
         NationalInstruments.PrecisionDateTime[] TmpTimeStamp;
         double CurrentNITimeStamp;
@@ -208,9 +235,11 @@ namespace kinect2_nidaq
         /// <summary>
         /// Buffer timeout
         /// </summary>
-        TimeSpan timeout = new TimeSpan(100000);
+        TimeSpan timeout = new TimeSpan(10000);
         
-
+        /// <summary>
+        /// Startup
+        /// </summary>
         public MainWindow()
         {
             InitializeComponent();
@@ -245,6 +274,7 @@ namespace kinect2_nidaq
                     DevBox.SelectedIndex = 0;
                     TerminalConfigBox.SelectedIndex = 0;
                 }
+
                 CPUPerformance = new PerformanceCounter();
                 RAMPerformance = new PerformanceCounter("Memory","Available MBytes");
 
@@ -270,34 +300,55 @@ namespace kinect2_nidaq
 
         }
 
+        /// <summary>
+        /// Start a recording session
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void StartButton_Click(object sender, RoutedEventArgs e)
         {
-            fColorSpacepoints = null;
 
+            if (bgTarball != null)
+            {
+                if (bgTarball.IsBusy)
+                {
+                    MessageBox.Show("Cannot start another session until tarball complete");
+                    return;
+
+                }
+            }
+
+            StatusBarTar.Value = 0;
+            fColorSpacepoints = null;
+            IsDataCompressed = false;
             ColorFramesDropped = 0;
             DepthFramesDropped = 0;
 
-            ColorFrameQueue = new BlockingCollection<ColorFrameEventArgs>(Constants.kMaxFrames);
-            DepthFrameQueue = new BlockingCollection<DepthFrameEventArgs>(Constants.kMaxFrames);
-           
-            ColorTSFile = new FileStream(FilePath_ColorTs, FileMode.Append);
-            ColorTSStream = new StreamWriter(ColorTSFile);
+            if (CheckColorStream.IsChecked==true)
+            {
+                //ColorFrameQueue = new ConcurrentQueue<ColorFrameEventArgs>();
+                ColorFrameCollection = new BlockingCollection<ColorFrameEventArgs>(Constants.kMaxFrames);
+                ColorTSFile = new FileStream(FilePath_ColorTs, FileMode.Append);
+                ColorTSStream = new StreamWriter(ColorTSFile);
+                ColorReader = sensor.ColorFrameSource.OpenReader();
+                ColorReader.FrameArrived += ColorReader_FrameArrived;
+                ColorDumpTask = System.Threading.Tasks.Task.Factory.StartNew(ColorRunner, fCancellationTokenSource.Token);
+                IsColorStreamEnabled = true;
+            }
 
-            DepthTSFile = new FileStream(FilePath_DepthTs, FileMode.Append);
-            DepthTSStream = new StreamWriter(DepthTSFile);
-
-            DepthVidFile = new FileStream(FilePath_DepthVid, FileMode.Append);
-            DepthVidStream = new BinaryWriter(DepthVidFile);
-
-            // Open the Kinect
-
-            ColorReader = sensor.ColorFrameSource.OpenReader();
-            DepthReader = sensor.DepthFrameSource.OpenReader();
-     
-            ColorReader.FrameArrived += ColorReader_FrameArrived;
-            DepthReader.FrameArrived += DepthReader_FrameArrived;
-            
-            // Display code
+            if (CheckDepthStream.IsChecked == true)
+            {
+                //DepthFrameQueue = new ConcurrentQueue<DepthFrameEventArgs>();
+                DepthFrameCollection = new BlockingCollection<DepthFrameEventArgs>(Constants.kMaxFrames);
+                DepthTSFile = new FileStream(FilePath_DepthTs, FileMode.Append);
+                DepthTSStream = new StreamWriter(DepthTSFile);
+                DepthVidFile = new FileStream(FilePath_DepthVid, FileMode.Append);
+                DepthVidStream = new BinaryWriter(DepthVidFile);
+                DepthReader = sensor.DepthFrameSource.OpenReader();
+                DepthReader.FrameArrived += DepthReader_FrameArrived;
+                DepthDumpTask = System.Threading.Tasks.Task.Factory.StartNew(DepthRunner, fCancellationTokenSource.Token);
+                IsDepthStreamEnabled = true;
+            }
 
             
             ImageTimer.Start();
@@ -307,69 +358,74 @@ namespace kinect2_nidaq
             CheckTimer.Start();
 
             // Start the tasks that empty each queue
-
-            ColorDumpTask = System.Threading.Tasks.Task.Factory.StartNew(ColorRunner, fCancellationTokenSource.Token);
-            DepthDumpTask = System.Threading.Tasks.Task.Factory.StartNew(DepthRunner, fCancellationTokenSource.Token);
+        
             NidaqDumpTask = System.Threading.Tasks.Task.Factory.StartNew(NidaqRunner, fCancellationTokenSource.Token);
-
-            StartButton.IsEnabled = false;           
+         
             sensor.Open();
-            StopButton.IsEnabled = true;
             WriteMetadata();
+
+            IsRecordingEnabled = true;
+            StopButton.IsEnabled = true;
+            StartButton.IsEnabled = false;  
             
-        }
-
-        private void WriteMetadata()
-        {
-            fMetadata.ColorResolution = new int[2] { Constants.kDefaultFrameWidth, Constants.kDefaultFrameHeight };
-            fMetadata.DepthResolution = fMetadata.ColorResolution;
-            fMetadata.NidaqChannels = aiChannelList.SelectedItems.Count;
-            fMetadata.NidaqTerminalConfiguration = TerminalConfigBox.SelectedItem.ToString();
-            fMetadata.SubjectName = SubjectName.Text;
-            fMetadata.SessionName = SessionName.Text;
-            fMetadata.IsLittleEndian = BitConverter.IsLittleEndian;
-            fMetadata.NidaqChannelNames = new string[aiChannelList.SelectedItems.Count];
-            fMetadata.DepthDataType = depthData.GetType().Name;
-            fMetadata.ColorDataType = colorData.GetType().Name;
-            Type t = typeof(NidaqData);
-            System.Reflection.PropertyInfo t2 = t.GetProperty("Data");
-            
-            if (t2 != null)
-            {
-                fMetadata.NidaqDataType = t2.PropertyType.Name;
-            }
-            else
-            {
-                fMetadata.NidaqDataType = null;
-            }
-
-
-            for (int i = 0; i < aiChannelList.SelectedItems.Count; i++)
-            {
-                fMetadata.NidaqChannelNames[i] = aiChannelList.SelectedItems[i].ToString();
-            }
-
-            fMetadata.StartTime = DateTime.Now;
-
-            JsonSerializer serializer = new JsonSerializer();
-            serializer.NullValueHandling = NullValueHandling.Ignore;
-
-            using (StreamWriter sw = new StreamWriter(FilePath_Metadata))
-            using (JsonWriter writer = new JsonTextWriter(sw))
-            {
-                serializer.Serialize(writer,fMetadata);
-            }
         }
 
         /// <summary>
-        /// Clean up when the window closes
+        /// Performs checks if user requests to close the window
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void Window_Closed(object sender, EventArgs e)
+        private void Window_Closed(object sender, CancelEventArgs e)
+        {
+            if (!IsSessionClean & IsRecordingEnabled == true)
+            {
+                MessageBoxResult dr = MessageBox.Show("You have not stopped the session, stop and cleanup now?", "Session stop", MessageBoxButton.YesNo);
+
+                switch (dr)
+                {
+                    case MessageBoxResult.Yes: 
+                        SessionCleanup();
+                        e.Cancel = true;
+                        return;
+                    case MessageBoxResult.No:
+                        break;
+                }
+            }
+
+            if (bgTarball != null)
+            { 
+                if (bgTarball.IsBusy)
+                {
+                    MessageBoxResult dr = MessageBox.Show("Tarball in progress, cancel and exit?", "Tarball exception", MessageBoxButton.OKCancel);
+
+                    switch (dr)
+                    {
+                        case MessageBoxResult.OK:
+                            break;
+                        case MessageBoxResult.Cancel:
+                            e.Cancel = true;
+                            break;
+                    }
+                }
+            }
+
+
+        }
+
+        /// <summary>
+        /// Clean up the session
+        /// </summary>
+        private void SessionCleanup()
         {
             // Dispose of the Kinect and the readers
+
+            resetEvent = new AutoResetEvent(false);
+            DevBox.IsEnabled = true;
+            aiChannelList.IsEnabled = true;
+            SamplingRateBox.IsEnabled = true;
+            TerminalConfigBox.IsEnabled = true;
             
+
             kinect2_nidaq.Properties.Settings.Default.Save();
 
             sensor.Close();
@@ -384,17 +440,20 @@ namespace kinect2_nidaq
                 AnalogInTask.Dispose();
             }
 
-            try
+            if (IsRecordingEnabled==true)
             {
-
-                ColorFrameQueue.CompleteAdding();
-                DepthFrameQueue.CompleteAdding();
+                if (IsColorStreamEnabled == true)
+                {
+                    ColorFrameCollection.CompleteAdding();
+                }
+                if (IsDepthStreamEnabled == true)
+                {
+                    DepthFrameCollection.CompleteAdding();
+                }
                 NidaqQueue.CompleteAdding();
             }
-            catch
-            {
-                ;
-            }
+
+           
 
             foreach (System.Threading.Tasks.Task task in new List<System.Threading.Tasks.Task>
             {
@@ -425,25 +484,70 @@ namespace kinect2_nidaq
                 VideoWriter.Close();
             }
 
-            try
+
+            if (IsRecordingEnabled == true)
             {
-                ColorReader.Dispose();
-                DepthReader.Dispose();
+                if (IsColorStreamEnabled == true)
+                {
+                    ColorReader.Dispose();
+                    ColorTSStream.Close();
+                    ColorDumpTask.Dispose();                  
+                }
+               
+                if (IsDepthStreamEnabled == true)
+                {
+                    DepthReader.Dispose();
+                    DepthTSStream.Close();
+                    DepthVidStream.Close();
+                    DepthDumpTask.Dispose();                
+                }
+
                 NidaqStream.Close();
                 NidaqFile.Close();
-                ColorTSStream.Close();
-                DepthTSStream.Close();
-                DepthVidStream.Close();
-                DepthDumpTask.Dispose();
                 NidaqDumpTask.Dispose();
-                ColorDumpTask.Dispose();
+
             }
-            catch
+
+            IsRecordingEnabled = false;
+            IsNidaqEnabled = false;
+            IsDepthStreamEnabled = false;
+            IsColorStreamEnabled = false;
+
+            if (!IsDataCompressed)
             {
-                ;
+                bgTarball = new BackgroundWorker();
+                bgTarball.ProgressChanged += bgTarball_ProgressChanged;
+                bgTarball.DoWork += bgTarball_DoWork;
+                bgTarball.WorkerReportsProgress = true;
+                bgTarball.RunWorkerCompleted += bgTarball_RunWorkerCompleted;
+               
+
+                bgTarball.RunWorkerAsync();
+                
+              
+                //resetEvent.WaitOne();
+                //bgTarball.Dispose();
             }
+
+            IsSessionClean = true;          
+        
         }
 
+        
+
+        /// <summary>
+        /// Clean up when stop button clicked
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void StopButton_Click(object sender, RoutedEventArgs e)
+        {
+            SessionCleanup();
+            StopButton.IsEnabled = false;
+        }
+
+        
+        
         /// <summary>
         /// Grab and release color data, update display code and buffers
         /// </summary>
@@ -458,7 +562,6 @@ namespace kinect2_nidaq
             {
                 
                 colorEventArgs = new ColorFrameEventArgs();
-               
                 colorEventArgs.RelativeTime = e.FrameReference.RelativeTime;
                 colorEventArgs.TimeStamp = CurrentNITimeStamp;            
 
@@ -477,34 +580,25 @@ namespace kinect2_nidaq
                     {
                         frame.CopyConvertedFrameDataToArray(colorData, ColorImageFormat.Bgra);
                     }
-
                     
                     colorEventArgs.RelativeTime = frame.RelativeTime;
                     colorEventArgs.ColorData = colorData;
                     colorEventArgs.ColorSpacepoints = fColorSpacepoints;
                     colorEventArgs.Height = frame.FrameDescription.Height;
                     colorEventArgs.Width = frame.FrameDescription.Width;
-                    colorEventArgs.DepthWidth = 512;
-                    colorEventArgs.DepthHeight = 424;
+                    colorEventArgs.DepthWidth = Constants.kDefaultFrameWidth;
+                    colorEventArgs.DepthHeight = Constants.kDefaultFrameHeight;
 
                     // update to include absolute timestamps with hi-rest stopwatch
 
-                    ColorFrameArrived(colorEventArgs);
+                    LastColorFrame = colorEventArgs;
+                    ColorFrameCollection.Add(colorEventArgs);
 
                 }
             }
 
         }
-
-        /// <summary>
-        /// Pass the color frame data
-        /// </summary>
-        /// <param name="e"></param>
-        private void ColorFrameArrived(ColorFrameEventArgs e)
-        {
-            LastColorFrame=e;
-            ColorFrameQueue.Add(e);
-        }
+        
 
         /// <summary>
         /// Grab and release depth data
@@ -515,6 +609,7 @@ namespace kinect2_nidaq
         {
             using (DepthFrame frame = e.FrameReference.AcquireFrame())
             {
+               
 
                 depthEventArgs = new DepthFrameEventArgs();
 
@@ -524,11 +619,17 @@ namespace kinect2_nidaq
                 }
                 else
                 {
+                    
                     depthEventArgs.RelativeTime = frame.RelativeTime;                   
                     frame.CopyFrameDataToArray(depthData);
 
-                    fColorSpacepoints = new ColorSpacePoint[depthData.Length];
-                    sensor.CoordinateMapper.MapDepthFrameToColorSpace(depthData, fColorSpacepoints);
+                    // Only map if we're also recording RGB, otherwise not reason to care...
+
+                    if (IsColorStreamEnabled == true)
+                    {
+                        fColorSpacepoints = new ColorSpacePoint[depthData.Length];
+                        sensor.CoordinateMapper.MapDepthFrameToColorSpace(depthData, fColorSpacepoints);
+                    }
 
                     depthEventArgs.TimeStamp = CurrentNITimeStamp;
                     depthEventArgs.DepthData = depthData;
@@ -537,20 +638,11 @@ namespace kinect2_nidaq
                     depthEventArgs.DepthMinReliableDistance = frame.DepthMinReliableDistance;
                     depthEventArgs.DepthMaxReliableDistance = frame.DepthMaxReliableDistance;
 
-                    DepthFrameArrived(depthEventArgs);
+                    LastDepthFrame = depthEventArgs;
+                    DepthFrameCollection.Add(depthEventArgs);
 
                 }
             }
-        }
-
-        /// <summary>
-        /// Pass the depth data
-        /// </summary>
-        /// <param name="e"></param>
-        private void DepthFrameArrived(DepthFrameEventArgs e)
-        {
-            LastDepthFrame=e;
-            DepthFrameQueue.Add(e);
         }
       
         /// <summary>
@@ -577,7 +669,6 @@ namespace kinect2_nidaq
                 NidaqReader.BeginReadWaveform(1, AnalogIn_Callback, AnalogInTask);
             }       
         }
-
         
         /// <summary>
         /// Updates display
@@ -604,12 +695,10 @@ namespace kinect2_nidaq
         private void ColorRunner()
         {
 
-            TimeSpan timeoutvid = TimeSpan.FromMilliseconds(1000);
-
-            while (!ColorFrameQueue.IsCompleted)
+            while (!ColorFrameCollection.IsCompleted)
             {
                 ColorFrameEventArgs colorData = null;
-                while (ColorFrameQueue.TryTake(out colorData, timeoutvid))
+                while (ColorFrameCollection.TryTake(out colorData, timeout))
                 {
                     if (!VideoWriter.IsOpen)
                     {
@@ -628,11 +717,12 @@ namespace kinect2_nidaq
         /// </summary>
         private void DepthRunner()
         {
-            while (!DepthFrameQueue.IsCompleted)
+            while (!DepthFrameCollection.IsCompleted)
             {
                 DepthFrameEventArgs depthData = null;
-                while (DepthFrameQueue.TryTake(out depthData, timeout))
-                {
+                while (DepthFrameCollection.TryTake(out depthData, timeout))
+                {         
+                    
                     DepthTSStream.WriteLine(String.Format("{0} {1}", depthData.RelativeTime.TotalMilliseconds, depthData.TimeStamp));
                     foreach (ushort depthDatum in depthData.DepthData)
                     {
@@ -675,17 +765,21 @@ namespace kinect2_nidaq
                     NationalInstruments.PrecisionDateTime[] timestamps = NIDatum[0].GetPrecisionTimeStamps();
 
                     // now we can write out...             
+                    // check for multiple samples?
 
                     for (int i = 0; i < nsamples; i++)
                     {
-                        string writestring = "";
+                        //string writestring = "";
                         for (int ii = 0; ii < nchannels; ii++)
                         {
-                            writestring = String.Format("{0} {1}", writestring, data[ii][i]);
+                            NidaqStream.Write(data[ii][i]);
+                            //writestring = String.Format("{0} {1}", writestring, data[ii][i]);
                         }
-                        NidaqStream.WriteLine(String.Format("{0} {1}",
+                        /*NidaqStream.WriteLine(String.Format("{0} {1}",
                             writestring,
-                            (double)timestamps[i].WholeSeconds + timestamps[i].FractionalSeconds));
+                            (double)timestamps[i].WholeSeconds + timestamps[i].FractionalSeconds));*/
+                        NidaqStream.Write((double)timestamps[i].WholeSeconds + timestamps[i].FractionalSeconds);
+
                     }
 
 
@@ -709,7 +803,7 @@ namespace kinect2_nidaq
                 string ChannelString = "";
                 NidaqQueue = new BlockingCollection<AnalogWaveform<double>[]>(Constants.nMaxBuffer);
                 NidaqFile = new FileStream(FilePath_Nidaq, FileMode.Append);
-                NidaqStream = new StreamWriter(NidaqFile);
+                NidaqStream = new BinaryWriter(NidaqFile);
                 
                 foreach (var Channel in aiChannelList.SelectedItems)
                 {
@@ -740,6 +834,12 @@ namespace kinect2_nidaq
                 SettingsChanged();
                 NidaqPrepare.IsEnabled = false;
                 StartButton.IsEnabled = true;
+                SamplingRateBox.IsEnabled = false;
+                DevBox.IsEnabled = false;
+                TerminalConfigBox.IsEnabled = false;
+                aiChannelList.IsEnabled = false;
+
+                IsNidaqEnabled = true;
             }
             else
             {
@@ -842,17 +942,26 @@ namespace kinect2_nidaq
                     FilePath_ColorVid = Path.Combine(SaveFolder, String.Format("{0}_{1}", prefix, "color_vid.mp4"));
                     FilePath_DepthTs = Path.Combine(SaveFolder, String.Format("{0}_{1}", prefix, "depth_ts.txt"));
                     FilePath_DepthVid = Path.Combine(SaveFolder, String.Format("{0}_{1}", prefix, "depth_vid.dat"));
-                    FilePath_Nidaq = Path.Combine(SaveFolder, String.Format("{0}_{1}", prefix, "nidaq.txt"));
+                    FilePath_Nidaq = Path.Combine(SaveFolder, String.Format("{0}_{1}", prefix, "nidaq.dat"));
                     FilePath_Metadata = Path.Combine(SaveFolder, String.Format("{0}_{1}", prefix, "metadata.json"));
+                    FilePath_Tar = Path.Combine(SaveFolder, String.Format("{0}.tar.gz", prefix));
 
-                    if (!File.Exists(FilePath_ColorTs) && !File.Exists(FilePath_ColorVid) && !File.Exists(FilePath_DepthTs)
-                        && !File.Exists(FilePath_DepthVid) && !File.Exists(FilePath_Nidaq) && (SamplingRate > 0 && SamplingRate < MaxRate)
-                        && Directory.Exists(SaveFolder) && aiChannelList.SelectedItems.Count > 0)
+                    FilePaths =  new List<string>{
+                        FilePath_ColorTs,
+                        FilePath_ColorVid,
+                        FilePath_DepthTs,
+                        FilePath_DepthVid,
+                        FilePath_Metadata,
+                        FilePath_Nidaq
+                        };
+
+                    if (FilePaths.All(p => !File.Exists(p)) && !File.Exists(FilePath_Tar) && (SamplingRate > 0 && SamplingRate < MaxRate)
+                        && Directory.Exists(SaveFolder) && aiChannelList.SelectedItems.Count > 0 && !IsNidaqEnabled)
                     {
                         NidaqPrepare.IsEnabled = true;
                         StartButton.IsEnabled = false;
                     }
-                    else
+                    else if (!IsNidaqEnabled)
                     {
                         NidaqPrepare.IsEnabled = false;
                         StartButton.IsEnabled = false;
@@ -890,20 +999,286 @@ namespace kinect2_nidaq
             
             // Check Buffers?
 
-            string CPUPercent= "CPU "+CPUPerformance.NextValue()+"%";
-            string RAMUsage = "RAM "+RAMPerformance.NextValue().ToString()+"MB";
+            string CPUPercent= "CPU "+CPUPerformance.NextValue().ToString("F1")+"%";
+            string RAMUsage = "RAM "+RAMPerformance.NextValue().ToString("F1")+"MB";
             double MemUsed = GC.GetTotalMemory(true) / 1e6;
 
             StatusBarCPU.Text = CPUPercent;
-            StatusBarRAM.Text = "RAM Usage "+MemUsed.ToString()+"MB";
+            StatusBarRAM.Text = "RAM Usage "+MemUsed.ToString("F1")+"MB";
 
+            StatusBarFramesDropped.Text = String.Format("Dropped C{0} D{1} ",
+                ColorFramesDropped,
+                DepthFramesDropped);
+
+            if (IsColorStreamEnabled == true)
+            {
+                StatusBarColor.Value = ((double)ColorFrameCollection.Count / (double)Constants.kMaxFrames )*100; 
+            }
+
+            if (IsDepthStreamEnabled == true)
+            {
+                StatusBarColor.Value = ((double)DepthFrameCollection.Count / (double)Constants.kMaxFrames)*100;
+            }
+
+            StatusBarNidaq.Value = ((double)NidaqQueue.Count / (double)Constants.nMaxBuffer) * 100;
+
+       
         }
 
-        private void StopButton_Click(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// Write out the relevant Metadata
+        /// </summary>
+        private void WriteMetadata()
         {
-            Window_Closed(sender,e);
-            StopButton.IsEnabled = false;
+
+            fMetadata.ColorResolution = new int[2] { Constants.kDefaultFrameWidth, Constants.kDefaultFrameHeight };
+            fMetadata.DepthResolution = fMetadata.ColorResolution;
+            fMetadata.NidaqChannels = aiChannelList.SelectedItems.Count;
+            fMetadata.NidaqTerminalConfiguration = TerminalConfigBox.SelectedItem.ToString();
+            fMetadata.NidaqChannelNames = new string[aiChannelList.SelectedItems.Count];
+            fMetadata.SubjectName = SubjectName.Text;
+            fMetadata.SessionName = SessionName.Text;
+            fMetadata.IsLittleEndian = BitConverter.IsLittleEndian;
+            fMetadata.DepthDataType = depthData.GetType().Name;
+            fMetadata.ColorDataType = colorData.GetType().Name;
+
+            Type t = typeof(NidaqData);
+            System.Reflection.PropertyInfo t2 = t.GetProperty("Data");
+
+            if (t2 != null)
+            {
+                fMetadata.NidaqDataType = t2.PropertyType.Name;
+            }
+            else
+            {
+                fMetadata.NidaqDataType = null;
+            }
+
+
+            for (int i = 0; i < aiChannelList.SelectedItems.Count; i++)
+            {
+                fMetadata.NidaqChannelNames[i] = aiChannelList.SelectedItems[i].ToString();
+            }
+
+            fMetadata.StartTime = DateTime.Now;
+
+            JsonSerializer serializer = new JsonSerializer();
+            serializer.NullValueHandling = NullValueHandling.Ignore;
+
+            using (StreamWriter sw = new StreamWriter(FilePath_Metadata))
+            using (JsonWriter writer = new JsonTextWriter(sw))
+            {
+                serializer.Serialize(writer, fMetadata);
+            }
         }
+
+        /// <summary>
+        /// Make the tarball
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        void bgTarball_DoWork(object sender, DoWorkEventArgs e)
+        {
+
+
+            Stream outStream = File.Create(FilePath_Tar);
+            GZipOutputStream gzoStream = new GZipOutputStream(outStream);
+            gzoStream.SetLevel(3); // need for speed!
+
+            TarOutputStream tarOutputStream = new TarOutputStream(gzoStream);
+            double TotalBytes = 0;
+
+            // gzip the tar file
+
+            foreach (string filename in FilePaths)
+            {
+
+                // get the total number of bytes for progress
+                if (File.Exists(filename) == true)
+                {
+                    using (Stream inputStream = File.OpenRead(filename))
+                    {
+                        TotalBytes += inputStream.Length;
+                    }
+                }
+            }
+
+
+           
+
+           
+
+            ETAQueue = new Queue<double>(new double[Constants.etaMaxBuffer]);
+            int counter = 0;
+            int counter2 = 0;
+            double ETA = 0;
+            double TotalRead = 0;
+            
+            Stopwatch TarballETA = new Stopwatch();
+            TarballETA.Start();
+
+            foreach (string filename in FilePaths)
+            {
+
+                // get the total number of bytes for progress
+
+                if (File.Exists(filename) == true)
+                {
+                    using (Stream inputStream = File.OpenRead(filename))
+                    {
+
+                        string tarName = filename.Substring(3);
+                        long fileSize = inputStream.Length;
+
+                        TarEntry entry = TarEntry.CreateTarEntry(Path.GetFileName(filename));
+                        entry.Size = fileSize;
+                        tarOutputStream.PutNextEntry(entry);
+
+                        byte[] localBuffer = new byte[32 * 1024];
+
+                        while (true)
+                        {
+                            int numRead = inputStream.Read(localBuffer, 0, localBuffer.Length);
+                            if (numRead <= 0)
+                            {
+                                break;
+                            }
+
+                            tarOutputStream.Write(localBuffer, 0, numRead);
+                            TotalRead += numRead;
+                            counter++;
+
+                            if (counter >= Constants.tUpdateCount)
+                            {
+
+                                counter = 0;
+                                counter2++;
+
+                                // Seconds per percent progress
+
+                                double Progress = TotalRead * 100.0 / TotalBytes;
+                                ETA = ((double)TarballETA.Elapsed.TotalSeconds / Progress);
+                                
+                                // Could simply elapse between loops instead of using total...
+
+                                ETAQueue.Enqueue(ETA);
+                                ETAQueue.Dequeue();
+
+                                //Console.WriteLine(String.Format("{0} {1} {2} {3} {4}", ETAQueue.Count, counter, Constants.tUpdateCount,TotalRead,TotalBytes));
+
+                                if (counter2 >= (double)Constants.etaMaxBuffer)
+                                {
+                                    counter2 = 0;
+                                    ((BackgroundWorker)sender).ReportProgress((int)Math.Ceiling(Progress), ETAQueue);
+                                }
+
+                            }
+
+
+
+                        }
+                    }
+                }
+
+                tarOutputStream.CloseEntry();
+
+            }
+
+            tarOutputStream.Close();
+            IsDataCompressed = true;
+
+            foreach (string filename in FilePaths)
+            {
+                File.Delete(filename);
+            }
+
+        }
+
+        /// <summary>
+        /// Background worker update progress bar
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        void bgTarball_ProgressChanged(object sender, ProgressChangedEventArgs e)
+        {
+            Queue<double> ReportQueue = (Queue<double>)e.UserState;
+            double ETAAve = ReportQueue.Average() * (100 - (double)e.ProgressPercentage);
+            int MinsRem = (int)Math.Floor(ETAAve / 60);
+            double SecsRem = ETAAve % 60;
+            StatusBarTar.Value = e.ProgressPercentage;
+            StatusBarTarETA.Text = String.Format("ETA: ({0} mins, {1} secs)", MinsRem, SecsRem.ToString("F2"));
+
+        }
+
+        /// <summary>
+        /// Tarball cleanup
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        void bgTarball_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
+        {
+            StatusBarTarETA.Text = "ETA: Completed";
+            StatusBarTar.Value = 100;
+            bgTarball.Dispose();
+        }
+
+        private void ExitButton_Click(object sender, RoutedEventArgs e)
+        {
+            Application.Current.MainWindow.Close();
+        }
+
+        private void DragRegion_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            /*DragMove();
+            Application.Current.MainWindow.RaiseEvent(new MouseButtonEventArgs(e.MouseDevice, e.Timestamp, MouseButton.Left)
+            {
+                RoutedEvent = MouseLeftButtonUpEvent
+            });*/
+        }
+
+        private void DragRegion_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            ;
+        }
+
+        // Solution from http://www.codeproject.com/Questions/284995/DragMove-problem-help-pls
+
+        private bool inDrag = false;
+        private Point anchorPoint;
+        private bool iscaptured = false;
+
+        protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
+        {
+            anchorPoint = PointToScreen(e.GetPosition(this));
+            inDrag = true;
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            if (inDrag)
+            {
+                if (!iscaptured)
+                {
+                    CaptureMouse();
+                    iscaptured = true;
+                }
+                Point currentPoint = PointToScreen(e.GetPosition(this));
+                this.Left = this.Left + currentPoint.X - anchorPoint.X;
+                this.Top = this.Top + currentPoint.Y - anchorPoint.Y;
+                anchorPoint = currentPoint;
+            }
+        }
+
+        protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
+        {
+            if (inDrag)
+            {
+                inDrag = false;
+                iscaptured = false;
+                ReleaseMouseCapture();
+            }
+        }
+
     }
 
 }
