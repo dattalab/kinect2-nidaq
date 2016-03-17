@@ -89,6 +89,8 @@
                             <RowDefinition Height="40" />
                             <RowDefinition Height="*" />
                             <RowDefinition Height="40" />
+                            <RowDefinition Height="40" />
+                            <RowDefinition Height="*" />
                             <RowDefinition Height="10" />
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
@@ -103,6 +105,25 @@
                         <Button Content="..." HorizontalAlignment="Left"  x:Name="StartButton_Copy" Click="SelectDirectory_Click" Grid.Column="0" Grid.Row="6"/>
                         <TextBox Name="FolderName" Grid.Column="1" Grid.Row="6" TextChanged="FolderName_TextChanged" Text="{Binding Source={x:Static properties:Settings.Default}, Path=FolderName}" />
                         <Grid Grid.Row="8" Grid.Column="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <CheckBox Name="CheckNoTimer" VerticalAlignment="Center" Click="CheckNoTimer_Checked" >
+                                <TextBlock Text="Record until user clicks stop" VerticalAlignment="Center" />
+                            </CheckBox>
+                            <Grid Grid.Column="1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Name="RecordingTimeBox" TextChanged="RecordingTime_TextChanged"/>
+                                <TextBlock Text="Recording time (minutes)" Name="RecordingTimeText" 
+                                           Grid.Column="1" VerticalAlignment="Center"
+                                           HorizontalAlignment="Center"  />
+                            </Grid>
+                        </Grid>
+                        <Grid Grid.Row="10" Grid.Column="1">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
@@ -151,11 +172,13 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="95" />
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="325" />
+                                <ColumnDefinition Width="200" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="100" />
                             </Grid.ColumnDefinitions>
                         </Grid>
                     </ItemsPanelTemplate>
@@ -173,6 +196,7 @@
                     </Grid>
                 </StatusBarItem>
                 <Separator Grid.Column="1" />
+            
                 <StatusBarItem Grid.Column="2">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -180,8 +204,8 @@
                             <ColumnDefinition Width="20" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <ProgressBar Value="0" Width="85" Height="16" Name="StatusBarTar" />
-                        <TextBlock Text="ETA: " Name="StatusBarTarETA" Width="140" Grid.Column="2" />
+                        <ProgressBar Value="0" Width="85" Height="16" Name="StatusBarProgress" IsEnabled="False" />
+                        <TextBlock Text="ETA: " Name="StatusBarProgressETA" Width="140" Grid.Column="2" IsEnabled="False" />
                     </Grid>
                 </StatusBarItem>
                 <Separator Grid.Column="3" />
@@ -199,6 +223,10 @@
                 <Separator Grid.Column="9" />
                 <StatusBarItem Grid.Column="10">
                     <TextBlock Name="StatusBarCPU" TextAlignment="Center" />
+                </StatusBarItem>
+                <Separator Grid.Column="11" />
+                <StatusBarItem Grid.Column="12" >
+                    <TextBlock Name="StatusBarSessionText" TextAlignment="Center" />
                 </StatusBarItem>
             </StatusBar>
         </Grid>

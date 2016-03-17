@@ -141,6 +141,8 @@ namespace kinect2_nidaq
         /// </summary>
         System.Threading.Tasks.Task DepthDumpTask;
 
+        DispatcherTimer RecTimer;
+
         /// <summary>
         /// National Instruments queue dump
         /// </summary>
@@ -225,12 +227,18 @@ namespace kinect2_nidaq
         private AutoResetEvent resetEvent;
         private List<string> FilePaths;
         private Queue<double> ETAQueue;
-        
+
+        private bool ContinuousMode = true;
+        private double RecordingTime;
+        private DateTime RecStartTime;
+        private DateTime RecEndTime;
 
         NationalInstruments.PrecisionDateTime[] TmpTimeStamp;
         double CurrentNITimeStamp;
 
         CancellationTokenSource fCancellationTokenSource = new CancellationTokenSource();
+
+        // TODO check timeout it seems to have a major performance impact!
 
         /// <summary>
         /// Buffer timeout
@@ -318,9 +326,10 @@ namespace kinect2_nidaq
                 }
             }
 
-            StatusBarTar.Value = 0;
+            StatusBarProgress.Value = 0;
             fColorSpacepoints = null;
             IsDataCompressed = false;
+            IsSessionClean = false;
             ColorFramesDropped = 0;
             DepthFramesDropped = 0;
 
@@ -366,8 +375,28 @@ namespace kinect2_nidaq
 
             IsRecordingEnabled = true;
             StopButton.IsEnabled = true;
-            StartButton.IsEnabled = false;  
+            StartButton.IsEnabled = false;
+
+            if (!ContinuousMode)
+            {
+                // if we're running in timed mode, fire a SessionCleanup in RecordingTime minutes...
+
+                RecTimer = new DispatcherTimer();
+                RecTimer.Interval = TimeSpan.FromMilliseconds(RecordingTime);
+                RecTimer.Tick += RecTimer_Tick;
+                
+                RecStartTime = DateTime.Now;
+                RecEndTime = RecStartTime.AddMilliseconds(RecordingTime);
+                RecTimer.Start();
+            }
             
+        }
+
+        void RecTimer_Tick(object sender, EventArgs e)
+        {
+            StopButton.IsEnabled = false;
+            SessionCleanup();
+            (sender as DispatcherTimer).Stop();
         }
 
         /// <summary>
@@ -423,8 +452,7 @@ namespace kinect2_nidaq
             DevBox.IsEnabled = true;
             aiChannelList.IsEnabled = true;
             SamplingRateBox.IsEnabled = true;
-            TerminalConfigBox.IsEnabled = true;
-            
+            TerminalConfigBox.IsEnabled = true;      
 
             kinect2_nidaq.Properties.Settings.Default.Save();
 
@@ -513,6 +541,9 @@ namespace kinect2_nidaq
             IsDepthStreamEnabled = false;
             IsColorStreamEnabled = false;
 
+            StatusBarProgress.IsEnabled = true;
+            StatusBarProgressETA.IsEnabled = true;
+
             if (!IsDataCompressed)
             {
                 bgTarball = new BackgroundWorker();
@@ -524,12 +555,9 @@ namespace kinect2_nidaq
 
                 bgTarball.RunWorkerAsync();
                 
-              
-                //resetEvent.WaitOne();
-                //bgTarball.Dispose();
+          
             }
-
-            IsSessionClean = true;          
+         
         
         }
 
@@ -542,12 +570,20 @@ namespace kinect2_nidaq
         /// <param name="e"></param>
         private void StopButton_Click(object sender, RoutedEventArgs e)
         {
-            SessionCleanup();
+            // Stop the recording timer if it's active
+
+            if (RecTimer != null)
+            {
+               
+                if (RecTimer.IsEnabled == true)
+                {
+                    RecTimer.Stop();
+                }
+            }
             StopButton.IsEnabled = false;
+            SessionCleanup();
         }
 
-        
-        
         /// <summary>
         /// Grab and release color data, update display code and buffers
         /// </summary>
@@ -933,8 +969,36 @@ namespace kinect2_nidaq
             {
                 SamplingRate = Convert.ToDouble(SamplingRateBox.Text.ToString());
                 SaveFolder = FolderName.Text;
+                double tmp = 0;
+                bool TimeFlag = true;
 
-                if (SessionName.Text.Length > 0 && SubjectName.Text.Length > 0 && SaveFolder != null)
+                if (CheckNoTimer.IsChecked == true)
+                {
+                    
+                    ContinuousMode = true;
+                    RecordingTimeText.IsEnabled = false;
+                    RecordingTimeBox.IsEnabled = false;
+                    //StatusBarSessionProgress.IsEnabled = false;
+                }
+                else if (RecordingTimeBox.Text.Length > 0 & double.TryParse(RecordingTimeBox.Text, out tmp) == true)
+                {
+                    
+                    CheckNoTimer.IsEnabled = false;
+                    ContinuousMode = false;
+                    RecordingTime = Convert.ToDouble(RecordingTimeBox.Text) * 60e3;
+                    //StatusBarSessionProgress.IsEnabled = true;
+                }
+                else
+                {
+                    TimeFlag=false;
+                    //StatusBarSessionProgress.IsEnabled = false;
+                    ContinuousMode = true;
+                    CheckNoTimer.IsEnabled = true;
+                    RecordingTimeText.IsEnabled = true;
+                    RecordingTimeBox.IsEnabled = true;
+                }
+
+                if (SessionName.Text.Length > 0 && SubjectName.Text.Length > 0 && SaveFolder != null && TimeFlag==true)
                 {
 
                     string prefix = String.Format("{0}_{1}", SessionName.Text, SubjectName.Text);
@@ -968,6 +1032,11 @@ namespace kinect2_nidaq
                     }
 
                 }
+                else
+                {
+                    NidaqPrepare.IsEnabled = false;
+                    StartButton.IsEnabled = false;
+                }
             }
             catch
             {
@@ -979,6 +1048,12 @@ namespace kinect2_nidaq
         {
             SettingsChanged();
         }
+
+        private void CheckNoTimer_Checked(object sender, RoutedEventArgs e)
+        {
+            SettingsChanged();
+        }
+
 
         /// <summary>
         /// Updates status bars
@@ -994,7 +1069,7 @@ namespace kinect2_nidaq
                 DriveInfo SaveDrive = new DriveInfo(PathInfo.Directory.Root.FullName);
                 Double FreeMem = SaveDrive.AvailableFreeSpace / 1e9;
                 Double AllMem = SaveDrive.TotalSize / 1e9;
-                StatusBarFreeSpace.Text = String.Format("{0} {1:0.##} / {2:0.##} GB Free", SaveFolder, FreeMem, AllMem);
+                StatusBarFreeSpace.Text = String.Format("{0} {1:0.##} / {2:0.##} GB Free", SaveDrive.RootDirectory, FreeMem, AllMem);
             }
             
             // Check Buffers?
@@ -1022,6 +1097,68 @@ namespace kinect2_nidaq
 
             StatusBarNidaq.Value = ((double)NidaqQueue.Count / (double)Constants.nMaxBuffer) * 100;
 
+            if (!ContinuousMode & RecTimer != null & IsRecordingEnabled)
+            {
+                // running in timed mode, get the time left
+
+                // total milliseconds 
+
+                if (RecTimer.IsEnabled == true)
+                {
+                    TimeSpan SessionTSpan = RecEndTime - RecStartTime;
+                    TimeSpan LeftTSpan = RecEndTime - DateTime.Now;
+
+                    StatusBarProgress.Value = 100.0 - (LeftTSpan.TotalMilliseconds * 100.0 / SessionTSpan.TotalMilliseconds);
+                    StatusBarProgressETA.Text = String.Format("ETA: ({0} mins, {1:F2} secs)", Math.Floor(LeftTSpan.TotalMinutes), LeftTSpan.TotalSeconds % 60);
+                }
+                else if (bgTarball == null)
+                {
+                    StatusBarProgress.Value = 0;
+                }
+                else if (bgTarball.IsBusy != true)
+                {
+                    StatusBarProgress.Value = 0;
+                }
+            }
+            else if (ContinuousMode & IsRecordingEnabled)
+            {
+                if (bgTarball == null)
+                {
+                    StatusBarProgressETA.Text = "ETA: Continuous";
+                }
+                else if (bgTarball.IsBusy == false)
+                {
+                    StatusBarProgressETA.Text = "ETA: Continuous";
+                }
+                
+            }
+            
+
+            if (IsRecordingEnabled == true)
+            {
+                StatusBarSessionText.Text = "Recording";
+            }
+            else if (bgTarball!=null)
+            {
+                if (bgTarball.IsBusy == true)
+                {
+                    StatusBarSessionText.Text = "Compressing";
+                }
+                else
+                {
+                    StatusBarSessionText.Text = "Done";
+                }
+            }
+            else if (IsSessionClean)
+            {
+                StatusBarSessionText.Text = "Done";
+            }
+            else
+            {
+                StatusBarSessionText.Text = "";
+            }
+           
+            
        
         }
 
@@ -1080,7 +1217,7 @@ namespace kinect2_nidaq
         void bgTarball_DoWork(object sender, DoWorkEventArgs e)
         {
 
-
+            
             Stream outStream = File.Create(FilePath_Tar);
             GZipOutputStream gzoStream = new GZipOutputStream(outStream);
             gzoStream.SetLevel(3); // need for speed!
@@ -1101,18 +1238,16 @@ namespace kinect2_nidaq
                         TotalBytes += inputStream.Length;
                     }
                 }
-            }
-
-
-           
-
-           
+            }         
 
             ETAQueue = new Queue<double>(new double[Constants.etaMaxBuffer]);
             int counter = 0;
             int counter2 = 0;
             double ETA = 0;
             double TotalRead = 0;
+            double Progress = 0;
+            double NewProgress = 0;
+            double TimeElapsed = 0;
             
             Stopwatch TarballETA = new Stopwatch();
             TarballETA.Start();
@@ -1156,15 +1291,20 @@ namespace kinect2_nidaq
 
                                 // Seconds per percent progress
 
-                                double Progress = TotalRead * 100.0 / TotalBytes;
-                                ETA = ((double)TarballETA.Elapsed.TotalSeconds / Progress);
+                                TimeElapsed = TarballETA.Elapsed.TotalSeconds;
+                                TarballETA.Restart();
+
+                                NewProgress = TotalRead * 100.0 / TotalBytes;
+                                ETA = TimeElapsed / (NewProgress - Progress);
                                 
-                                // Could simply elapse between loops instead of using total...
-
+                                Progress = NewProgress;
+                                
                                 ETAQueue.Enqueue(ETA);
-                                ETAQueue.Dequeue();
 
-                                //Console.WriteLine(String.Format("{0} {1} {2} {3} {4}", ETAQueue.Count, counter, Constants.tUpdateCount,TotalRead,TotalBytes));
+                                while (ETAQueue.Count > Constants.etaMaxBuffer)
+                                {
+                                    ETAQueue.Dequeue();
+                                }
 
                                 if (counter2 >= (double)Constants.etaMaxBuffer)
                                 {
@@ -1185,7 +1325,7 @@ namespace kinect2_nidaq
             }
 
             tarOutputStream.Close();
-            IsDataCompressed = true;
+            
 
             foreach (string filename in FilePaths)
             {
@@ -1205,9 +1345,8 @@ namespace kinect2_nidaq
             double ETAAve = ReportQueue.Average() * (100 - (double)e.ProgressPercentage);
             int MinsRem = (int)Math.Floor(ETAAve / 60);
             double SecsRem = ETAAve % 60;
-            StatusBarTar.Value = e.ProgressPercentage;
-            StatusBarTarETA.Text = String.Format("ETA: ({0} mins, {1} secs)", MinsRem, SecsRem.ToString("F2"));
-
+            StatusBarProgress.Value = e.ProgressPercentage;
+            StatusBarProgressETA.Text = String.Format("ETA: ({0} mins, {1} secs)", MinsRem, SecsRem.ToString("F2"));
         }
 
         /// <summary>
@@ -1217,28 +1356,18 @@ namespace kinect2_nidaq
         /// <param name="e"></param>
         void bgTarball_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
-            StatusBarTarETA.Text = "ETA: Completed";
-            StatusBarTar.Value = 100;
+            IsDataCompressed = true;
+            IsSessionClean = true;
+            StatusBarProgressETA.Text = "ETA: Completed";
+            StatusBarProgress.Value = 100;
+            StatusBarProgress.IsEnabled = false;
+            StatusBarProgressETA.IsEnabled = false;
             bgTarball.Dispose();
         }
 
         private void ExitButton_Click(object sender, RoutedEventArgs e)
         {
             Application.Current.MainWindow.Close();
-        }
-
-        private void DragRegion_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            /*DragMove();
-            Application.Current.MainWindow.RaiseEvent(new MouseButtonEventArgs(e.MouseDevice, e.Timestamp, MouseButton.Left)
-            {
-                RoutedEvent = MouseLeftButtonUpEvent
-            });*/
-        }
-
-        private void DragRegion_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            ;
         }
 
         // Solution from http://www.codeproject.com/Questions/284995/DragMove-problem-help-pls
@@ -1279,6 +1408,12 @@ namespace kinect2_nidaq
             }
         }
 
+        private void RecordingTime_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            SettingsChanged();
+        }
+
+ 
     }
 
 }

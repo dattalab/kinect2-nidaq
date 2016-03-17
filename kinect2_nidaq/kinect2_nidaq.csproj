@@ -126,7 +126,6 @@
     <Compile Include="Sensor\Extensions.cs" />
     <Compile Include="Sensor\FrameData.cs" />
     <Compile Include="Sensor\NidaqData.cs" />
-    <Compile Include="Sensor\TarBall.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
