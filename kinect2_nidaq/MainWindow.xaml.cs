@@ -1219,10 +1219,10 @@ namespace kinect2_nidaq
 
             
             Stream outStream = File.Create(FilePath_Tar);
-            GZipOutputStream gzoStream = new GZipOutputStream(outStream);
-            gzoStream.SetLevel(3); // need for speed!
-
-            TarOutputStream tarOutputStream = new TarOutputStream(gzoStream);
+            //GZipOutputStream gzoStream = new GZipOutputStream(outStream);
+            //gzoStream.SetLevel(3); // need for speed!
+           
+            TarOutputStream tarOutputStream = new TarOutputStream(outStream);           
             double TotalBytes = 0;
 
             // gzip the tar file
@@ -1239,16 +1239,19 @@ namespace kinect2_nidaq
                     }
                 }
             }         
-
+            
             ETAQueue = new Queue<double>(new double[Constants.etaMaxBuffer]);
             int counter = 0;
             int counter2 = 0;
+            
             double ETA = 0;
             double TotalRead = 0;
             double Progress = 0;
             double NewProgress = 0;
             double TimeElapsed = 0;
-            
+           
+            byte[] localBuffer = new byte[ 256 * 1024];
+
             Stopwatch TarballETA = new Stopwatch();
             TarballETA.Start();
 
@@ -1267,9 +1270,8 @@ namespace kinect2_nidaq
 
                         TarEntry entry = TarEntry.CreateTarEntry(Path.GetFileName(filename));
                         entry.Size = fileSize;
+                        
                         tarOutputStream.PutNextEntry(entry);
-
-                        byte[] localBuffer = new byte[32 * 1024];
 
                         while (true)
                         {
@@ -1318,18 +1320,20 @@ namespace kinect2_nidaq
 
                         }
                     }
+
+                    tarOutputStream.CloseEntry();
+
                 }
 
-                tarOutputStream.CloseEntry();
-
+                
+               
             }
 
             tarOutputStream.Close();
-            
 
             foreach (string filename in FilePaths)
             {
-                File.Delete(filename);
+                //File.Delete(filename);
             }
 
         }
