@@ -289,11 +289,14 @@ namespace kinect2_nidaq
                 }
 
                 CPUPerformance = new PerformanceCounter();
-                RAMPerformance = new PerformanceCounter("Memory","Available MBytes");
+                RAMPerformance = new PerformanceCounter();
 
                 CPUPerformance.CategoryName = "Processor";
                 CPUPerformance.CounterName = "% Processor Time";
                 CPUPerformance.InstanceName = "_Total";
+
+                RAMPerformance.CategoryName = "Memory";
+                RAMPerformance.CounterName = "Available MBytes";
 
                 ImageTimer = new DispatcherTimer();
                 ImageTimer.Interval = TimeSpan.FromMilliseconds(50.0);
@@ -833,7 +836,6 @@ namespace kinect2_nidaq
                     }
                 }
             }
-          
         }
 
         /// <summary> 
@@ -1151,12 +1153,12 @@ namespace kinect2_nidaq
             
             // Check Buffers?
 
-            string CPUPercent= "CPU "+CPUPerformance.NextValue().ToString("F1")+"%";
-            string RAMUsage = "RAM "+RAMPerformance.NextValue().ToString("F1")+"MB";
+            string CPUPercent= "CPU "+(100-CPUPerformance.NextValue()).ToString("F1")+"% Free";
+            string RAMUsage = "RAM "+RAMPerformance.NextValue().ToString("F1")+"MB Free";
             double MemUsed = GC.GetTotalMemory(true) / 1e6;
 
             StatusBarCPU.Text = CPUPercent;
-            StatusBarRAM.Text = "RAM Usage "+MemUsed.ToString("F1")+"MB";
+            StatusBarRAM.Text = RAMUsage;
 
             StatusBarFramesDropped.Text = String.Format("Dropped C{0} D{1} ",
                 ColorFramesDropped,
