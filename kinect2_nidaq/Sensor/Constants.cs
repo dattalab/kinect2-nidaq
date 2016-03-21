@@ -16,6 +16,6 @@ namespace Sensor
         public static readonly int kMaxFrames = 10;
         public static readonly int nMaxBuffer = 10000;
         public static readonly int tUpdateCount = 15;
-        public static readonly int etaMaxBuffer = 15;
+        public static readonly int etaMaxBuffer = 5;
     }
 }

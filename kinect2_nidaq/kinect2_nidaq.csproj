@@ -121,6 +121,17 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="External\GzTar.cs" />
+    <Compile Include="External\tar-cs\tar-cs\DataWriter.cs" />
+    <Compile Include="External\tar-cs\tar-cs\IArchiveDataWriter.cs" />
+    <Compile Include="External\tar-cs\tar-cs\ITarHeader.cs" />
+    <Compile Include="External\tar-cs\tar-cs\LegacyTarWriter.cs" />
+    <Compile Include="External\tar-cs\tar-cs\TarException.cs" />
+    <Compile Include="External\tar-cs\tar-cs\TarHeader.cs" />
+    <Compile Include="External\tar-cs\tar-cs\TarReader.cs" />
+    <Compile Include="External\tar-cs\tar-cs\TarWriter.cs" />
+    <Compile Include="External\tar-cs\tar-cs\UsTarHeader.cs" />
+    <Compile Include="External\tar-cs\tar-cs\WriteEvent.cs" />
     <Compile Include="Metadata\MetaData.cs" />
     <Compile Include="Sensor\Constants.cs" />
     <Compile Include="Sensor\Extensions.cs" />
@@ -167,8 +178,9 @@
   <ItemGroup>
     <None Include="App.config" />
   </ItemGroup>
+  <ItemGroup />
   <ItemGroup>
-    <Folder Include="External\" />
+    <Content Include="External\tar-cs\tar-cs\tar-cs.csproj" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

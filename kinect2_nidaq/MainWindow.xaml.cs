@@ -19,8 +19,7 @@ using AForge.Video.FFMPEG;
 using Microsoft.WindowsAPICodePack.Dialogs;
 using Newtonsoft.Json;
 using Metadata;
-using ICSharpCode.SharpZipLib.Tar;
-using ICSharpCode.SharpZipLib.GZip;
+using GzTar;
 
 // TODO 1: Make sure we exit gracefully if start button has not been clicked (without the use of try/catch)
 // TODO 2: Control sync signal in software?
@@ -141,6 +140,9 @@ namespace kinect2_nidaq
         /// </summary>
         System.Threading.Tasks.Task DepthDumpTask;
 
+
+        System.Threading.Tasks.Task CompressTask;
+
         DispatcherTimer RecTimer;
 
         /// <summary>
@@ -170,7 +172,8 @@ namespace kinect2_nidaq
         private string FilePath_DepthVid;
         private string FilePath_Metadata;
         private string FilePath_Tar;
-
+        private string FilePath_TarMetadata;
+        
         /// <summary>
         /// Session flags
         /// </summary>
@@ -180,6 +183,8 @@ namespace kinect2_nidaq
         private bool IsDataCompressed = false;
         private bool IsSessionClean = false;
         private bool IsNidaqEnabled = false;
+
+        private TimeSpan VideoWriterInitialTimeSpan;
 
         /// <summary>
         /// Terminal configuration
@@ -223,11 +228,11 @@ namespace kinect2_nidaq
         private DepthFrameEventArgs depthEventArgs;
 
         private AnalogWaveform<double>[] Waveforms;
-        private BackgroundWorker bgTarball;
+        private double tarballProgress;
         private AutoResetEvent resetEvent;
-        private List<string> FilePaths;
+        private List<string[]> FilePaths;
         private Queue<double> ETAQueue;
-
+        private double ETAAve;
         private bool ContinuousMode = true;
         private double RecordingTime;
         private DateTime RecStartTime;
@@ -315,16 +320,6 @@ namespace kinect2_nidaq
         /// <param name="e"></param>
         private void StartButton_Click(object sender, RoutedEventArgs e)
         {
-
-            if (bgTarball != null)
-            {
-                if (bgTarball.IsBusy)
-                {
-                    MessageBox.Show("Cannot start another session until tarball complete");
-                    return;
-
-                }
-            }
 
             StatusBarProgress.Value = 0;
             fColorSpacepoints = null;
@@ -421,23 +416,21 @@ namespace kinect2_nidaq
                 }
             }
 
-            if (bgTarball != null)
-            { 
-                if (bgTarball.IsBusy)
+            if (CompressTask != null)
+            {
+                if (!CompressTask.IsCompleted) 
                 {
-                    MessageBoxResult dr = MessageBox.Show("Tarball in progress, cancel and exit?", "Tarball exception", MessageBoxButton.OKCancel);
-
+                    MessageBoxResult dr = MessageBox.Show("Still compressing, cancel the compression and quit?", "Session stop", MessageBoxButton.YesNo);
                     switch (dr)
                     {
-                        case MessageBoxResult.OK:
+                        case MessageBoxResult.Yes:
                             break;
-                        case MessageBoxResult.Cancel:
+                        case MessageBoxResult.No:
                             e.Cancel = true;
-                            break;
+                            return;
                     }
                 }
             }
-
 
         }
 
@@ -449,10 +442,9 @@ namespace kinect2_nidaq
             // Dispose of the Kinect and the readers
 
             resetEvent = new AutoResetEvent(false);
-            DevBox.IsEnabled = true;
-            aiChannelList.IsEnabled = true;
-            SamplingRateBox.IsEnabled = true;
-            TerminalConfigBox.IsEnabled = true;      
+
+     
+                 
 
             kinect2_nidaq.Properties.Settings.Default.Save();
 
@@ -546,22 +538,96 @@ namespace kinect2_nidaq
 
             if (!IsDataCompressed)
             {
-                bgTarball = new BackgroundWorker();
-                bgTarball.ProgressChanged += bgTarball_ProgressChanged;
-                bgTarball.DoWork += bgTarball_DoWork;
-                bgTarball.WorkerReportsProgress = true;
-                bgTarball.RunWorkerCompleted += bgTarball_RunWorkerCompleted;
-               
-
-                bgTarball.RunWorkerAsync();
-                
-          
+                CompressTask = System.Threading.Tasks.Task.Factory.StartNew(CompressSession, fCancellationTokenSource.Token);
             }
-         
-        
+       
         }
 
-        
+
+        private void CompressSession()
+        {
+
+            long totalBytes = 0;
+            foreach (string[] FileName in FilePaths)
+            {
+                if (File.Exists(FileName[0]))
+                {
+                    FileInfo tmpInfo = new FileInfo(FileName[0]);
+                    totalBytes += tmpInfo.Length;
+                }
+            }
+
+            // start a stopwatch?
+
+            Stopwatch ETATgz = new Stopwatch();
+            ETATgz.Start();
+
+            //long oldWritten = 0;
+            long totalWritten = 0;
+            //long leftToWrite = 0;
+            //double oldProgress = 0;
+            double totalSeconds = 0;
+            double ETAEstimate = 0;
+
+            ETAQueue = new Queue<double>(Constants.etaMaxBuffer);
+
+            using (AGZTar tarball = new AGZTar(FilePath_Tar))
+            {
+                if (totalBytes != 0)
+                {
+                    tarball.WriteEvent += (sender, args) =>
+                    {
+
+                        totalSeconds = ETATgz.Elapsed.TotalSeconds;
+                       
+                        totalWritten += args.Written;
+                        tarballProgress = 100 - 100 * (totalBytes - totalWritten) / totalBytes;
+
+                        // seconds per percent
+
+                        ETAEstimate = (100-tarballProgress) * (totalSeconds / (double)(tarballProgress));
+                      
+                        ETAQueue.Enqueue(ETAEstimate);
+                        while (ETAQueue.Count > Constants.etaMaxBuffer)
+                        {
+                            ETAQueue.Dequeue();
+                        }
+
+                        //ETAAve = ETAEstimate;
+                        
+                        ETAAve = ETAQueue.Average();
+                        
+                        // time since last update
+
+                    };
+                }
+
+                foreach (string[] FileName in FilePaths)
+                {
+                    Console.WriteLine(String.Format("{0} {1}", FileName[0], FileName[1]));
+
+                    if (File.Exists(FileName[0]))
+                    {
+                        Console.WriteLine(String.Format("{0} {1}", FileName[0], FileName[1]));
+                        tarball.Write(FileName[0],FileName[1]);
+                    }
+                }
+            }
+
+            File.Copy(FilePath_Metadata, FilePath_TarMetadata);
+
+            foreach (string[] FileName in FilePaths)
+            {
+                if (File.Exists(FileName[0]))
+                {
+                    File.Delete(FileName[0]);
+                }
+                
+            }
+
+            IsSessionClean = true;
+            
+        }
 
         /// <summary>
         /// Clean up when stop button clicked
@@ -739,9 +805,10 @@ namespace kinect2_nidaq
                     if (!VideoWriter.IsOpen)
                     {
                         VideoWriter.Open(FilePath_ColorVid, Constants.kDefaultFrameWidth, Constants.kDefaultFrameHeight);
+                        VideoWriterInitialTimeSpan = colorData.RelativeTime;
                     }
                     ColorTSStream.WriteLine(String.Format("{0} {1}", colorData.RelativeTime.TotalMilliseconds, colorData.TimeStamp));
-                    VideoWriter.WriteVideoFrame(colorData.ToBitmap().ToSystemBitmap());
+                    VideoWriter.WriteVideoFrame(colorData.ToBitmap().ToSystemBitmap(),colorData.RelativeTime-VideoWriterInitialTimeSpan);
                 }
             }
            
@@ -867,15 +934,19 @@ namespace kinect2_nidaq
                 NidaqReader.BeginReadWaveform(1, AnalogInCallback, AnalogInTask);
 
                 runningTask = AnalogInTask;
-                SettingsChanged();
+                
                 NidaqPrepare.IsEnabled = false;
                 StartButton.IsEnabled = true;
-                SamplingRateBox.IsEnabled = false;
-                DevBox.IsEnabled = false;
-                TerminalConfigBox.IsEnabled = false;
-                aiChannelList.IsEnabled = false;
 
+
+                InactivateSettings();
+
+                
                 IsNidaqEnabled = true;
+
+               
+
+
             }
             else
             {
@@ -1001,25 +1072,31 @@ namespace kinect2_nidaq
                 if (SessionName.Text.Length > 0 && SubjectName.Text.Length > 0 && SaveFolder != null && TimeFlag==true)
                 {
 
-                    string prefix = String.Format("{0}_{1}", SessionName.Text, SubjectName.Text);
-                    FilePath_ColorTs = Path.Combine(SaveFolder, String.Format("{0}_{1}", prefix, "color_ts.txt"));
-                    FilePath_ColorVid = Path.Combine(SaveFolder, String.Format("{0}_{1}", prefix, "color_vid.mp4"));
-                    FilePath_DepthTs = Path.Combine(SaveFolder, String.Format("{0}_{1}", prefix, "depth_ts.txt"));
-                    FilePath_DepthVid = Path.Combine(SaveFolder, String.Format("{0}_{1}", prefix, "depth_vid.dat"));
-                    FilePath_Nidaq = Path.Combine(SaveFolder, String.Format("{0}_{1}", prefix, "nidaq.dat"));
-                    FilePath_Metadata = Path.Combine(SaveFolder, String.Format("{0}_{1}", prefix, "metadata.json"));
-                    FilePath_Tar = Path.Combine(SaveFolder, String.Format("{0}.tar.gz", prefix));
+                    string BasePath = Path.GetTempPath();
+                    string now = DateTime.Now.ToString("yyyyMMddHHmmss");
 
-                    FilePaths =  new List<string>{
-                        FilePath_ColorTs,
-                        FilePath_ColorVid,
-                        FilePath_DepthTs,
-                        FilePath_DepthVid,
-                        FilePath_Metadata,
-                        FilePath_Nidaq
-                        };
+                    FilePath_ColorTs = Path.Combine(BasePath, String.Format("rgb_ts_{0}.txt", now));
+                    FilePath_ColorVid = Path.Combine(BasePath, String.Format("rgb_{0}.mp4", now));
+                    FilePath_DepthTs = Path.Combine(BasePath, String.Format("depth_ts_{0}.txt", now));
+                    FilePath_DepthVid = Path.Combine(BasePath, String.Format("depth_{0}.dat", now));
+                    FilePath_Nidaq = Path.Combine(BasePath, String.Format("nidaq_{0}.dat", now));
+                    FilePath_Metadata = Path.Combine(BasePath, String.Format("metadata_{0}.json", now));
+                    
+                    // Paths for the tarball and metadata
 
-                    if (FilePaths.All(p => !File.Exists(p)) && !File.Exists(FilePath_Tar) && (SamplingRate > 0 && SamplingRate < MaxRate)
+                    FilePath_Tar = Path.Combine(SaveFolder, String.Format("session_{0}.tar.gz", now));
+                    FilePath_TarMetadata = Path.Combine(SaveFolder, String.Format("session_{0}.json", now));
+ 
+                    FilePaths =  new List<string[]>{
+                        new string[] { FilePath_ColorTs, "rgb_ts.txt" },
+                        new string[] { FilePath_ColorVid, "rgb.mp4" },
+                        new string[] { FilePath_DepthTs, "depth_ts.txt" },
+                        new string[] { FilePath_DepthVid, "depth.dat" },
+                        new string[] { FilePath_Metadata, "metadata.json" },
+                        new string[] { FilePath_Nidaq, "nidaq.dat" }
+                      };
+
+                    if (FilePaths.All(p => !File.Exists(p[0])) && !File.Exists(FilePath_Tar) && (SamplingRate > 0 && SamplingRate < MaxRate)
                         && Directory.Exists(SaveFolder) && aiChannelList.SelectedItems.Count > 0 && !IsNidaqEnabled)
                     {
                         NidaqPrepare.IsEnabled = true;
@@ -1097,6 +1174,7 @@ namespace kinect2_nidaq
 
             StatusBarNidaq.Value = ((double)NidaqQueue.Count / (double)Constants.nMaxBuffer) * 100;
 
+            
             if (!ContinuousMode & RecTimer != null & IsRecordingEnabled)
             {
                 // running in timed mode, get the time left
@@ -1111,52 +1189,62 @@ namespace kinect2_nidaq
                     StatusBarProgress.Value = 100.0 - (LeftTSpan.TotalMilliseconds * 100.0 / SessionTSpan.TotalMilliseconds);
                     StatusBarProgressETA.Text = String.Format("ETA: ({0} mins, {1:F2} secs)", Math.Floor(LeftTSpan.TotalMinutes), LeftTSpan.TotalSeconds % 60);
                 }
-                else if (bgTarball == null)
+                else if (CompressTask != null)
                 {
-                    StatusBarProgress.Value = 0;
+                    if (CompressTask.IsCompleted)
+                    {
+                        StatusBarProgress.Value = 0;
+                    }
+                    
                 }
-                else if (bgTarball.IsBusy != true)
-                {
-                    StatusBarProgress.Value = 0;
-                }
+                
             }
             else if (ContinuousMode & IsRecordingEnabled)
             {
-                if (bgTarball == null)
-                {
-                    StatusBarProgressETA.Text = "ETA: Continuous";
-                }
-                else if (bgTarball.IsBusy == false)
-                {
-                    StatusBarProgressETA.Text = "ETA: Continuous";
-                }
-                
+                StatusBarProgressETA.Text = "ETA: Continuous";
             }
             
 
             if (IsRecordingEnabled == true)
             {
                 StatusBarSessionText.Text = "Recording";
+                InactivateSettings();
+                
             }
-            else if (bgTarball!=null)
+            else if (CompressTask!=null)
             {
-                if (bgTarball.IsBusy == true)
+                if (!CompressTask.IsCompleted)
                 {
-                    StatusBarSessionText.Text = "Compressing";
+                    StatusBarProgress.Value = tarballProgress;
+
+                    if (ETAAve >= 0)
+                    {
+                        StatusBarProgressETA.Text = String.Format("ETA: ({0} mins, {1:F2} secs)", Math.Floor(ETAAve / 60), ETAAve % 60);
+                        StatusBarSessionText.Text = "Compressing";
+                    }
+                    
                 }
                 else
                 {
+                    ActivateSettings();
+                    
+                    StatusBarProgress.Value = 100;
+                    StatusBarProgressETA.Text = "ETA: (0 mins, 0 secs)";
                     StatusBarSessionText.Text = "Done";
                 }
             }
             else if (IsSessionClean)
             {
+                StatusBarProgress.Value = 100;
+                StatusBarProgressETA.Text = "ETA: (0 mins, 0 secs)";
                 StatusBarSessionText.Text = "Done";
             }
             else
             {
                 StatusBarSessionText.Text = "";
             }
+              
+             
            
             
        
@@ -1209,166 +1297,6 @@ namespace kinect2_nidaq
             }
         }
 
-        /// <summary>
-        /// Make the tarball
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        void bgTarball_DoWork(object sender, DoWorkEventArgs e)
-        {
-
-            
-            Stream outStream = File.Create(FilePath_Tar);
-            //GZipOutputStream gzoStream = new GZipOutputStream(outStream);
-            //gzoStream.SetLevel(3); // need for speed!
-           
-            TarOutputStream tarOutputStream = new TarOutputStream(outStream);           
-            double TotalBytes = 0;
-
-            // gzip the tar file
-
-            foreach (string filename in FilePaths)
-            {
-
-                // get the total number of bytes for progress
-                if (File.Exists(filename) == true)
-                {
-                    using (Stream inputStream = File.OpenRead(filename))
-                    {
-                        TotalBytes += inputStream.Length;
-                    }
-                }
-            }         
-            
-            ETAQueue = new Queue<double>(new double[Constants.etaMaxBuffer]);
-            int counter = 0;
-            int counter2 = 0;
-            
-            double ETA = 0;
-            double TotalRead = 0;
-            double Progress = 0;
-            double NewProgress = 0;
-            double TimeElapsed = 0;
-           
-            byte[] localBuffer = new byte[ 256 * 1024];
-
-            Stopwatch TarballETA = new Stopwatch();
-            TarballETA.Start();
-
-            foreach (string filename in FilePaths)
-            {
-
-                // get the total number of bytes for progress
-
-                if (File.Exists(filename) == true)
-                {
-                    using (Stream inputStream = File.OpenRead(filename))
-                    {
-
-                        string tarName = filename.Substring(3);
-                        long fileSize = inputStream.Length;
-
-                        TarEntry entry = TarEntry.CreateTarEntry(Path.GetFileName(filename));
-                        entry.Size = fileSize;
-                        
-                        tarOutputStream.PutNextEntry(entry);
-
-                        while (true)
-                        {
-                            int numRead = inputStream.Read(localBuffer, 0, localBuffer.Length);
-                            if (numRead <= 0)
-                            {
-                                break;
-                            }
-
-                            tarOutputStream.Write(localBuffer, 0, numRead);
-                            TotalRead += numRead;
-                            counter++;
-
-                            if (counter >= Constants.tUpdateCount)
-                            {
-
-                                counter = 0;
-                                counter2++;
-
-                                // Seconds per percent progress
-
-                                TimeElapsed = TarballETA.Elapsed.TotalSeconds;
-                                TarballETA.Restart();
-
-                                NewProgress = TotalRead * 100.0 / TotalBytes;
-                                ETA = TimeElapsed / (NewProgress - Progress);
-                                
-                                Progress = NewProgress;
-                                
-                                ETAQueue.Enqueue(ETA);
-
-                                while (ETAQueue.Count > Constants.etaMaxBuffer)
-                                {
-                                    ETAQueue.Dequeue();
-                                }
-
-                                if (counter2 >= (double)Constants.etaMaxBuffer)
-                                {
-                                    counter2 = 0;
-                                    ((BackgroundWorker)sender).ReportProgress((int)Math.Ceiling(Progress), ETAQueue);
-                                }
-
-                            }
-
-
-
-                        }
-                    }
-
-                    tarOutputStream.CloseEntry();
-
-                }
-
-                
-               
-            }
-
-            tarOutputStream.Close();
-
-            foreach (string filename in FilePaths)
-            {
-                //File.Delete(filename);
-            }
-
-        }
-
-        /// <summary>
-        /// Background worker update progress bar
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        void bgTarball_ProgressChanged(object sender, ProgressChangedEventArgs e)
-        {
-            Queue<double> ReportQueue = (Queue<double>)e.UserState;
-            double ETAAve = ReportQueue.Average() * (100 - (double)e.ProgressPercentage);
-            int MinsRem = (int)Math.Floor(ETAAve / 60);
-            double SecsRem = ETAAve % 60;
-            StatusBarProgress.Value = e.ProgressPercentage;
-            StatusBarProgressETA.Text = String.Format("ETA: ({0} mins, {1} secs)", MinsRem, SecsRem.ToString("F2"));
-        }
-
-        /// <summary>
-        /// Tarball cleanup
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        void bgTarball_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
-        {
-            IsDataCompressed = true;
-            IsSessionClean = true;
-            StatusBarProgressETA.Text = "ETA: Completed";
-            StatusBarProgress.Value = 100;
-            StatusBarProgress.IsEnabled = false;
-            StatusBarProgressETA.IsEnabled = false;
-            bgTarball.Dispose();
-        }
-
         private void ExitButton_Click(object sender, RoutedEventArgs e)
         {
             Application.Current.MainWindow.Close();
@@ -1417,6 +1345,39 @@ namespace kinect2_nidaq
             SettingsChanged();
         }
 
+        private void InactivateSettings()
+        {
+            SubjectName.IsEnabled = false;
+            SessionName.IsEnabled = false;
+            FolderName.IsEnabled = false;
+            SamplingRateBox.IsEnabled = false;
+            DevBox.IsEnabled = false;
+            TerminalConfigBox.IsEnabled = false;
+            aiChannelList.IsEnabled = false;
+            SelectDirectory.IsEnabled = false;
+            CheckColorStream.IsEnabled = false;
+            CheckDepthStream.IsEnabled = false;
+            CheckNoTimer.IsEnabled = false;
+            RecordingTimeBox.IsEnabled = false;
+            RecordingTimeText.IsEnabled = false;
+        }
+
+        private void ActivateSettings()
+        {
+            DevBox.IsEnabled = true;
+            aiChannelList.IsEnabled = true;
+            SamplingRateBox.IsEnabled = true;
+            TerminalConfigBox.IsEnabled = true; 
+            SubjectName.IsEnabled = true;
+            SessionName.IsEnabled = true;
+            FolderName.IsEnabled = true;
+            SelectDirectory.IsEnabled = true;
+            CheckColorStream.IsEnabled = true;
+            CheckDepthStream.IsEnabled = true;
+            CheckNoTimer.IsEnabled = true;
+            RecordingTimeBox.IsEnabled = true;
+            RecordingTimeText.IsEnabled = true;
+        }
  
     }
 
