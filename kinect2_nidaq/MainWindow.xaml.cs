@@ -23,8 +23,7 @@ using GzTar;
 
 // TODO 1: Make sure we exit gracefully if start button has not been clicked (without the use of try/catch)
 // TODO 2: Control sync signal in software?
-// TODO 3: Add option to create a tarball when the user clicks stop or closes window
-// TODO 4: Make sure we're not being too clever with pre-allocation...
+// TODO 3: Make sure we're not being too clever with pre-allocation...
 
 namespace kinect2_nidaq
 {
@@ -183,6 +182,7 @@ namespace kinect2_nidaq
         private bool IsDataCompressed = false;
         private bool IsSessionClean = false;
         private bool IsNidaqEnabled = false;
+        private bool IsPreviewEnabled = false;
 
         private TimeSpan VideoWriterInitialTimeSpan;
 
@@ -324,6 +324,11 @@ namespace kinect2_nidaq
         private void StartButton_Click(object sender, RoutedEventArgs e)
         {
 
+            // First fire up the Nidaq is we have any channels selected...
+
+           
+            InactivateSettings();
+
             StatusBarProgress.Value = 0;
             fColorSpacepoints = null;
             IsDataCompressed = false;
@@ -331,29 +336,46 @@ namespace kinect2_nidaq
             ColorFramesDropped = 0;
             DepthFramesDropped = 0;
 
+            if (PreviewMode.IsChecked == true)
+            {
+                IsRecordingEnabled = false;
+                IsPreviewEnabled = true;
+            }
+            else
+            {
+                IsRecordingEnabled = true;
+            }
+
             if (CheckColorStream.IsChecked==true)
             {
                 //ColorFrameQueue = new ConcurrentQueue<ColorFrameEventArgs>();
+                if (IsRecordingEnabled == true)
+                {
+                    ColorTSFile = new FileStream(FilePath_ColorTs, FileMode.Append);
+                    ColorTSStream = new StreamWriter(ColorTSFile);
+                    ColorDumpTask = System.Threading.Tasks.Task.Factory.StartNew(ColorRunner, fCancellationTokenSource.Token);
+                }
                 ColorFrameCollection = new BlockingCollection<ColorFrameEventArgs>(Constants.kMaxFrames);
-                ColorTSFile = new FileStream(FilePath_ColorTs, FileMode.Append);
-                ColorTSStream = new StreamWriter(ColorTSFile);
                 ColorReader = sensor.ColorFrameSource.OpenReader();
                 ColorReader.FrameArrived += ColorReader_FrameArrived;
-                ColorDumpTask = System.Threading.Tasks.Task.Factory.StartNew(ColorRunner, fCancellationTokenSource.Token);
                 IsColorStreamEnabled = true;
             }
 
             if (CheckDepthStream.IsChecked == true)
             {
                 //DepthFrameQueue = new ConcurrentQueue<DepthFrameEventArgs>();
+                if (IsRecordingEnabled==true)
+                {
+                    DepthTSFile = new FileStream(FilePath_DepthTs, FileMode.Append);
+                    DepthTSStream = new StreamWriter(DepthTSFile);
+                    DepthVidFile = new FileStream(FilePath_DepthVid, FileMode.Append);
+                    DepthVidStream = new BinaryWriter(DepthVidFile);
+                    DepthDumpTask = System.Threading.Tasks.Task.Factory.StartNew(DepthRunner, fCancellationTokenSource.Token);
+                }
+
                 DepthFrameCollection = new BlockingCollection<DepthFrameEventArgs>(Constants.kMaxFrames);
-                DepthTSFile = new FileStream(FilePath_DepthTs, FileMode.Append);
-                DepthTSStream = new StreamWriter(DepthTSFile);
-                DepthVidFile = new FileStream(FilePath_DepthVid, FileMode.Append);
-                DepthVidStream = new BinaryWriter(DepthVidFile);
                 DepthReader = sensor.DepthFrameSource.OpenReader();
                 DepthReader.FrameArrived += DepthReader_FrameArrived;
-                DepthDumpTask = System.Threading.Tasks.Task.Factory.StartNew(DepthRunner, fCancellationTokenSource.Token);
                 IsDepthStreamEnabled = true;
             }
 
@@ -365,17 +387,30 @@ namespace kinect2_nidaq
             CheckTimer.Start();
 
             // Start the tasks that empty each queue
-        
-            NidaqDumpTask = System.Threading.Tasks.Task.Factory.StartNew(NidaqRunner, fCancellationTokenSource.Token);
+            // TODO:  allow the user to not record Nidaq data
+            // TODO:  output simple sync signal (allow user to map depth/rgb for this)
+            // TODO:  simple preview mode (don't write anything out)
+
+            if (CheckNidaqStream.IsChecked==true && IsRecordingEnabled==true)
+            {
+                NidaqPrepare();
+                if (IsNidaqEnabled==true)
+                {
+                    NidaqDumpTask = System.Threading.Tasks.Task.Factory.StartNew(NidaqRunner, fCancellationTokenSource.Token);
+                }
+            }
          
             sensor.Open();
-            WriteMetadata();
 
-            IsRecordingEnabled = true;
+            if (IsRecordingEnabled == true)
+            {
+                WriteMetadata();
+            }
+
             StopButton.IsEnabled = true;
             StartButton.IsEnabled = false;
 
-            if (!ContinuousMode)
+            if (!ContinuousMode & IsRecordingEnabled==true)
             {
                 // if we're running in timed mode, fire a SessionCleanup in RecordingTime minutes...
 
@@ -444,10 +479,7 @@ namespace kinect2_nidaq
         {
             // Dispose of the Kinect and the readers
 
-            resetEvent = new AutoResetEvent(false);
-
-     
-                 
+            resetEvent = new AutoResetEvent(false);             
 
             kinect2_nidaq.Properties.Settings.Default.Save();
 
@@ -473,10 +505,11 @@ namespace kinect2_nidaq
                 {
                     DepthFrameCollection.CompleteAdding();
                 }
-                NidaqQueue.CompleteAdding();
-            }
-
-           
+                if (IsNidaqEnabled == true)
+                {
+                    NidaqQueue.CompleteAdding();
+                }
+            }           
 
             foreach (System.Threading.Tasks.Task task in new List<System.Threading.Tasks.Task>
             {
@@ -525,16 +558,20 @@ namespace kinect2_nidaq
                     DepthDumpTask.Dispose();                
                 }
 
-                NidaqStream.Close();
-                NidaqFile.Close();
-                NidaqDumpTask.Dispose();
-
+                if (IsNidaqEnabled == true)
+                {
+                    NidaqStream.Close();
+                    NidaqFile.Close();
+                    NidaqDumpTask.Dispose();
+                }
+                
             }
 
             IsRecordingEnabled = false;
             IsNidaqEnabled = false;
             IsDepthStreamEnabled = false;
             IsColorStreamEnabled = false;
+            IsPreviewEnabled = false;
 
             StatusBarProgress.IsEnabled = true;
             StatusBarProgressETA.IsEnabled = true;
@@ -649,6 +686,8 @@ namespace kinect2_nidaq
                     RecTimer.Stop();
                 }
             }
+
+
             StopButton.IsEnabled = false;
             SessionCleanup();
         }
@@ -697,7 +736,11 @@ namespace kinect2_nidaq
                     // update to include absolute timestamps with hi-rest stopwatch
 
                     LastColorFrame = colorEventArgs;
-                    ColorFrameCollection.Add(colorEventArgs);
+
+                    if (IsRecordingEnabled == true)
+                    {
+                        ColorFrameCollection.Add(colorEventArgs);
+                    }
 
                 }
             }
@@ -744,7 +787,11 @@ namespace kinect2_nidaq
                     depthEventArgs.DepthMaxReliableDistance = frame.DepthMaxReliableDistance;
 
                     LastDepthFrame = depthEventArgs;
-                    DepthFrameCollection.Add(depthEventArgs);
+
+                    if (IsRecordingEnabled == true)
+                    {
+                        DepthFrameCollection.Add(depthEventArgs);
+                    }
 
                 }
             }
@@ -813,8 +860,7 @@ namespace kinect2_nidaq
                     ColorTSStream.WriteLine(String.Format("{0} {1}", colorData.RelativeTime.TotalMilliseconds, colorData.TimeStamp));
                     VideoWriter.WriteVideoFrame(colorData.ToBitmap().ToSystemBitmap(),colorData.RelativeTime-VideoWriterInitialTimeSpan);
                 }
-            }
-           
+            }          
             
         }
 
@@ -893,15 +939,13 @@ namespace kinect2_nidaq
         }
 
         /// <summary>
-        /// Queue up the NiDaq board with selected properties
+        /// Prepares the National Instruments board for acquisition
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void NidaqPrepare_Click(object sender, RoutedEventArgs e)
+        private void NidaqPrepare() 
         {
-            if (runningTask == null && aiChannelList.SelectedItems.Count>0)
+            if (runningTask == null && aiChannelList.SelectedItems.Count > 0 && (SamplingRate > 0 && SamplingRate < MaxRate))
             {
-                
+
                 MyTerminalConfig = (AITerminalConfiguration)Enum.Parse(typeof(AITerminalConfiguration), TerminalConfigBox.SelectedItem.ToString(), true);
                 AnalogInTask = new NationalInstruments.DAQmx.Task();
                 NidaqDump = new NidaqData();
@@ -909,14 +953,14 @@ namespace kinect2_nidaq
                 NidaqQueue = new BlockingCollection<AnalogWaveform<double>[]>(Constants.nMaxBuffer);
                 NidaqFile = new FileStream(FilePath_Nidaq, FileMode.Append);
                 NidaqStream = new BinaryWriter(NidaqFile);
-                
+
                 foreach (var Channel in aiChannelList.SelectedItems)
                 {
                     ChannelString = String.Format("{0} {1},", ChannelString, Channel.ToString());
                 }
 
                 ChannelString.Trim(new Char[] { ' ', ',' });
-                
+
                 AnalogInTask.AIChannels.CreateVoltageChannel(
                     ChannelString,
                     "",
@@ -925,7 +969,7 @@ namespace kinect2_nidaq
                     5,
                     AIVoltageUnits.Volts);
 
-                
+
                 AnalogInTask.Timing.ConfigureSampleClock("", SamplingRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, 1);
                 AnalogInTask.Control(TaskAction.Verify);
 
@@ -936,25 +980,12 @@ namespace kinect2_nidaq
                 NidaqReader.BeginReadWaveform(1, AnalogInCallback, AnalogInTask);
 
                 runningTask = AnalogInTask;
-                
-                NidaqPrepare.IsEnabled = false;
-                StartButton.IsEnabled = true;
 
-
-                InactivateSettings();
-
-                
+                //NidaqPrepare.IsEnabled = false;
+                //Indicate that we're pulling data from the Nidaq
                 IsNidaqEnabled = true;
 
-               
-
-
             }
-            else
-            {
-                MessageBox.Show("Need to select at least one NI channel");
-            }
-           
         }
 
         /// <summary>
@@ -1038,6 +1069,7 @@ namespace kinect2_nidaq
 
             // set up the files and folders, if any exist do not give the user the chance to start the session...
 
+
             try
             {
                 SamplingRate = Convert.ToDouble(SamplingRateBox.Text.ToString());
@@ -1045,7 +1077,11 @@ namespace kinect2_nidaq
                 double tmp = 0;
                 bool TimeFlag = true;
 
-                if (CheckNoTimer.IsChecked == true)
+                if (PreviewMode.IsChecked == true)
+                {
+                    StartButton.IsEnabled = true;
+                }
+                else if (CheckNoTimer.IsChecked == true)
                 {
                     
                     ContinuousMode = true;
@@ -1071,7 +1107,8 @@ namespace kinect2_nidaq
                     RecordingTimeBox.IsEnabled = true;
                 }
 
-                if (SessionName.Text.Length > 0 && SubjectName.Text.Length > 0 && SaveFolder != null && TimeFlag==true)
+                if (SessionName.Text.Length > 0 && SubjectName.Text.Length > 0 && SaveFolder != null && TimeFlag==true
+                    && PreviewMode.IsChecked == false)
                 {
 
                     string BasePath = Path.GetTempPath();
@@ -1098,28 +1135,23 @@ namespace kinect2_nidaq
                         new string[] { FilePath_Nidaq, "nidaq.dat" }
                       };
 
-                    if (FilePaths.All(p => !File.Exists(p[0])) && !File.Exists(FilePath_Tar) && (SamplingRate > 0 && SamplingRate < MaxRate)
-                        && Directory.Exists(SaveFolder) && aiChannelList.SelectedItems.Count > 0 && !IsNidaqEnabled)
+                    if (FilePaths.All(p => !File.Exists(p[0])) && !File.Exists(FilePath_Tar) &&  Directory.Exists(SaveFolder))
                     {
-                        NidaqPrepare.IsEnabled = true;
-                        StartButton.IsEnabled = false;
+                        //NidaqPrepare.IsEnabled = true;
+                        StartButton.IsEnabled = true;
                     }
-                    else if (!IsNidaqEnabled)
-                    {
-                        NidaqPrepare.IsEnabled = false;
-                        StartButton.IsEnabled = false;
-                    }
+                    
 
                 }
-                else
+                else if (PreviewMode.IsChecked==false)
                 {
-                    NidaqPrepare.IsEnabled = false;
+                    //NidaqPrepare.IsEnabled = false;
                     StartButton.IsEnabled = false;
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                ;
+                Console.WriteLine(ex.ToString());
             }
         }
 
@@ -1169,12 +1201,15 @@ namespace kinect2_nidaq
                 StatusBarColor.Value = ((double)ColorFrameCollection.Count / (double)Constants.kMaxFrames )*100; 
             }
 
-            if (IsDepthStreamEnabled == true)
+            if (IsDepthStreamEnabled == true) 
             {
                 StatusBarColor.Value = ((double)DepthFrameCollection.Count / (double)Constants.kMaxFrames)*100;
             }
 
-            StatusBarNidaq.Value = ((double)NidaqQueue.Count / (double)Constants.nMaxBuffer) * 100;
+            if (IsNidaqEnabled == true & IsRecordingEnabled == true)
+            {
+                StatusBarNidaq.Value = ((double)NidaqQueue.Count / (double)Constants.nMaxBuffer) * 100;
+            }
 
             
             if (!ContinuousMode & RecTimer != null & IsRecordingEnabled)
@@ -1201,17 +1236,20 @@ namespace kinect2_nidaq
                 }
                 
             }
-            else if (ContinuousMode & IsRecordingEnabled)
+            else if ((ContinuousMode & IsRecordingEnabled) | IsPreviewEnabled)
             {
-                StatusBarProgressETA.Text = "ETA: Continuous";
+                StatusBarProgressETA.Text = "ETA: Continuous";   
             }
             
-
             if (IsRecordingEnabled == true)
             {
                 StatusBarSessionText.Text = "Recording";
                 InactivateSettings();
                 
+            }
+            else if (IsPreviewEnabled)
+            {
+                StatusBarSessionText.Text = "Preview";
             }
             else if (CompressTask!=null)
             {
@@ -1245,10 +1283,6 @@ namespace kinect2_nidaq
             {
                 StatusBarSessionText.Text = "";
             }
-              
-             
-           
-            
        
         }
 
@@ -1379,6 +1413,19 @@ namespace kinect2_nidaq
             CheckNoTimer.IsEnabled = true;
             RecordingTimeBox.IsEnabled = true;
             RecordingTimeText.IsEnabled = true;
+        }
+
+        private void PreviewMode_Checked(object sender, RoutedEventArgs e)
+        {
+            //StartButton.IsEnabled = true;
+            //InactivateSettings();
+            SettingsChanged();
+        }
+
+        private void PreviewMode_Unchecked(object sender, RoutedEventArgs e)
+        {
+            SettingsChanged();
+            //ActivateSettings();
         }
  
     }

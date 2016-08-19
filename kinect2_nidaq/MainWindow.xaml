@@ -56,6 +56,8 @@
                             <RowDefinition Height="40" />
                             <RowDefinition Height="*" />
                             <RowDefinition Height="40" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="40" />
                             <RowDefinition Height="10" />
                         </Grid.RowDefinitions>
                         <TextBlock Text="Device" Grid.Row="1" TextAlignment="Center" VerticalAlignment="Bottom"/>
@@ -64,9 +66,9 @@
                         <ComboBox Name="TerminalConfigBox" Grid.Row="4" />
                         <TextBlock Text="Sampling Rate" Grid.Row="5" TextAlignment="Center" VerticalAlignment="Bottom" />
                         <TextBox Name="SamplingRateBox" Text="{Binding Source={x:Static properties:Settings.Default}, Path=SamplingRate}" TextChanged="SamplingRateBox_TextChanged" Grid.Row="6" />
-                        <Button Content="Prepare NIDaq" Name="NidaqPrepare" Click="NidaqPrepare_Click" Grid.Row="8" IsEnabled="False" />
-                        <Button Content="Start Session"  Name="StartButton" Click="StartButton_Click"  Grid.Row="10" IsEnabled="False" />
-                        <Button Content="Stop Session" Name="StopButton" Click="StopButton_Click" Grid.Row="12" IsEnabled="False" /> 
+                        <!--<Button Content="Prepare NIDaq" Name="NidaqPrepare" Click="NidaqPrepare_Click" Grid.Row="10" IsEnabled="False" /-->
+                        <Button Content="Start Session"  Name="StartButton" Click="StartButton_Click"  Grid.Row="8" IsEnabled="False" />
+                        <Button Content="Stop Session" Name="StopButton" Click="StopButton_Click" Grid.Row="10" IsEnabled="False" /> 
                     </Grid>
                     <Grid Grid.Column="3">
                         <Grid.RowDefinitions>
@@ -131,12 +133,19 @@
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*" />
                                 <RowDefinition Height="*" />
+                                <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
                             <CheckBox VerticalAlignment="Center" Name="CheckDepthStream">
                                 <TextBlock Text="Depth Stream" />
                             </CheckBox>
                             <CheckBox VerticalAlignment="Center" Grid.Row="1" Grid.Column="0" Name="CheckColorStream" >
                                 <TextBlock Text="Color Stream" />
+                            </CheckBox>
+                            <CheckBox VerticalAlignment="Center" Grid.Row="1" Grid.Column="1" Name="PreviewMode" Checked="PreviewMode_Checked" Unchecked="PreviewMode_Unchecked">
+                                <TextBlock Text="Preview Mode" />
+                            </CheckBox>
+                            <CheckBox VerticalAlignment="Center" Grid.Row="3" Grid.Column="0" Name="CheckNidaqStream">
+                                <TextBlock Text="Nidaq Stream" />
                             </CheckBox>
                         </Grid>
                     </Grid>
@@ -170,9 +179,9 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="250" />
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="95" />
+                                <ColumnDefinition Width="140" />
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="200" />
+                                <ColumnDefinition Width="160" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
