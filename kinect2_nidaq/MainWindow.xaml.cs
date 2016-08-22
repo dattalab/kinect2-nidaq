@@ -282,10 +282,23 @@ namespace kinect2_nidaq
                     DevBox.Items.Add(currentDevice.ToString());
                 }
 
+                // If the DevBox is empty (e.g. if we did not find any devices, bail)...
+
                 if (DevBox.Items.Count > 0)
                 {
                     DevBox.SelectedIndex = 0;
                     TerminalConfigBox.SelectedIndex = 0;
+                }
+                else
+                {
+                    // Inactive the Nidaq stream if we didn't find any devices
+
+                    CheckNidaqStream.IsChecked = false;
+                    CheckNidaqStream.IsEnabled = false;
+                    DevBox.IsEnabled = false;
+                    SamplingRateBox.IsEnabled = false;
+                    aiChannelList.IsEnabled = false;
+
                 }
 
                 CPUPerformance = new PerformanceCounter();
@@ -305,8 +318,9 @@ namespace kinect2_nidaq
                 CheckTimer = new DispatcherTimer();
                 CheckTimer.Interval = TimeSpan.FromMilliseconds(1000);
                 CheckTimer.Tick += CheckTimer_Tick;
-            
+                CheckTimer.Start();
 
+                SettingsChanged();
             }
             else
             {
@@ -323,18 +337,28 @@ namespace kinect2_nidaq
         /// <param name="e"></param>
         private void StartButton_Click(object sender, RoutedEventArgs e)
         {
+            
+            // Inactivate the settings, preven the user from doing something unintentional
 
-            // First fire up the Nidaq is we have any channels selected...
-
-           
             InactivateSettings();
+
+            // Progress bar starts at 0
 
             StatusBarProgress.Value = 0;
             fColorSpacepoints = null;
+
+            // When we the start the session, we have not compressed the data and cleaned up
+            // everything
+
             IsDataCompressed = false;
             IsSessionClean = false;
+
+            // and obvi no dropped frames yet...
+
             ColorFramesDropped = 0;
             DepthFramesDropped = 0;
+
+            // if the user checked previewmode, don't record any data
 
             if (PreviewMode.IsChecked == true)
             {
@@ -345,6 +369,8 @@ namespace kinect2_nidaq
             {
                 IsRecordingEnabled = true;
             }
+
+            // Only create new files if we're not in preview mode
 
             if (CheckColorStream.IsChecked==true)
             {
@@ -360,6 +386,8 @@ namespace kinect2_nidaq
                 ColorReader.FrameArrived += ColorReader_FrameArrived;
                 IsColorStreamEnabled = true;
             }
+
+            // Same for depth stream
 
             if (CheckDepthStream.IsChecked == true)
             {
@@ -380,20 +408,26 @@ namespace kinect2_nidaq
             }
 
             
+            // Start the display timer
+
             ImageTimer.Start();
 
             // HD check
 
-            CheckTimer.Start();
+            //CheckTimer.Start();
 
             // Start the tasks that empty each queue
             // TODO:  allow the user to not record Nidaq data
             // TODO:  output simple sync signal (allow user to map depth/rgb for this)
             // TODO:  simple preview mode (don't write anything out)
+            // TODO:  better nidaq status indicators (ready to roll, are rolling, etc.)
 
             if (CheckNidaqStream.IsChecked==true && IsRecordingEnabled==true)
             {
                 NidaqPrepare();
+
+                // If NidaqPrepare worked, we should be rolling now
+               
                 if (IsNidaqEnabled==true)
                 {
                     NidaqDumpTask = System.Threading.Tasks.Task.Factory.StartNew(NidaqRunner, fCancellationTokenSource.Token);
@@ -439,7 +473,7 @@ namespace kinect2_nidaq
         /// <param name="e"></param>
         private void Window_Closed(object sender, CancelEventArgs e)
         {
-            if (!IsSessionClean & IsRecordingEnabled == true)
+            if (!IsSessionClean && IsRecordingEnabled == true)
             {
                 MessageBoxResult dr = MessageBox.Show("You have not stopped the session, stop and cleanup now?", "Session stop", MessageBoxButton.YesNo);
 
@@ -481,12 +515,18 @@ namespace kinect2_nidaq
 
             resetEvent = new AutoResetEvent(false);             
 
+            // Save the UI settings
+
             kinect2_nidaq.Properties.Settings.Default.Save();
+
+            // Stop the sensor and the image display
 
             sensor.Close();
             ImageTimer.Stop();
             
             //CheckTimer.Stop();
+
+            // Stop the Nidaq acquisition if it's enabled
 
             if (runningTask != null)
             {
@@ -494,6 +534,8 @@ namespace kinect2_nidaq
                 AnalogInTask.Stop();
                 AnalogInTask.Dispose();
             }
+
+            // If we're recording, shut down all of the queues
 
             if (IsRecordingEnabled==true)
             {
@@ -510,6 +552,8 @@ namespace kinect2_nidaq
                     NidaqQueue.CompleteAdding();
                 }
             }           
+
+            // if the dump task were initiated, deal with them
 
             foreach (System.Threading.Tasks.Task task in new List<System.Threading.Tasks.Task>
             {
@@ -535,10 +579,14 @@ namespace kinect2_nidaq
                 }
             }
 
+            // close the open videowriters
+
             if (VideoWriter.IsOpen)
             {
                 VideoWriter.Close();
             }
+
+            // close the readers, files and filewriting tasks
 
 
             if (IsRecordingEnabled == true)
@@ -567,20 +615,30 @@ namespace kinect2_nidaq
                 
             }
 
+            StatusBarProgress.IsEnabled = true;
+            StatusBarProgressETA.IsEnabled = true;
+
+            // If we were recording and the data isn't compressed, compress it!
+
+            if (!IsDataCompressed && IsRecordingEnabled == true)
+            {
+                CompressTask = System.Threading.Tasks.Task.Factory.StartNew(CompressSession, fCancellationTokenSource.Token);
+            }
+
+            // now everything has been shut off, set all the flags accordingly
+
             IsRecordingEnabled = false;
             IsNidaqEnabled = false;
             IsDepthStreamEnabled = false;
             IsColorStreamEnabled = false;
             IsPreviewEnabled = false;
 
-            StatusBarProgress.IsEnabled = true;
-            StatusBarProgressETA.IsEnabled = true;
+            // now enable the statusbars
 
-            if (!IsDataCompressed)
-            {
-                CompressTask = System.Threading.Tasks.Task.Factory.StartNew(CompressSession, fCancellationTokenSource.Token);
-            }
-       
+            ColorLight.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
+            DepthLight.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
+            NidaqLight.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
+
         }
 
 
@@ -690,6 +748,7 @@ namespace kinect2_nidaq
 
             StopButton.IsEnabled = false;
             SessionCleanup();
+            ActivateSettings();
         }
 
         /// <summary>
@@ -736,6 +795,8 @@ namespace kinect2_nidaq
                     // update to include absolute timestamps with hi-rest stopwatch
 
                     LastColorFrame = colorEventArgs;
+
+                    // don't add to the queue if we're in preview mode
 
                     if (IsRecordingEnabled == true)
                     {
@@ -787,6 +848,8 @@ namespace kinect2_nidaq
                     depthEventArgs.DepthMaxReliableDistance = frame.DepthMaxReliableDistance;
 
                     LastDepthFrame = depthEventArgs;
+
+                    // don't add if we're in preview mode
 
                     if (IsRecordingEnabled == true)
                     {
@@ -1077,9 +1140,31 @@ namespace kinect2_nidaq
                 double tmp = 0;
                 bool TimeFlag = true;
 
+                // if preview is checked, then we're previewing depth and color
+
+                // else if notimer is selected, disable time related options
+                // else if recording time box is specified correctly, then convert recording time to minutes
+                // else everything enabled                
+
+                if (aiChannelList.SelectedItems.Count > 0 && DevBox.Items.Count > 0 && (SamplingRate > 0 && SamplingRate < MaxRate))
+                {
+                    CheckNidaqStream.IsEnabled = true;
+                }
+                else
+                {
+                    CheckNidaqStream.IsEnabled = false;
+                    CheckNidaqStream.IsChecked = false;
+                }
+                
                 if (PreviewMode.IsChecked == true)
                 {
                     StartButton.IsEnabled = true;
+                    CheckDepthStream.IsChecked = true;
+                    CheckColorStream.IsChecked = true;
+                    CheckNidaqStream.IsChecked = false;
+                    CheckNoTimer.IsChecked = false;
+                    CheckNoTimer.IsEnabled = false;
+                    RecordingTimeBox.IsEnabled = false;
                 }
                 else if (CheckNoTimer.IsChecked == true)
                 {
@@ -1106,6 +1191,8 @@ namespace kinect2_nidaq
                     RecordingTimeText.IsEnabled = true;
                     RecordingTimeBox.IsEnabled = true;
                 }
+
+                // if the filepath checks out, then establish our filenames
 
                 if (SessionName.Text.Length > 0 && SubjectName.Text.Length > 0 && SaveFolder != null && TimeFlag==true
                     && PreviewMode.IsChecked == false)
@@ -1140,14 +1227,15 @@ namespace kinect2_nidaq
                         //NidaqPrepare.IsEnabled = true;
                         StartButton.IsEnabled = true;
                     }
+                    else if (PreviewMode.IsChecked == false)
+                    {
+                        //NidaqPrepare.IsEnabled = false;
+                        StartButton.IsEnabled = false;
+                    }
                     
 
                 }
-                else if (PreviewMode.IsChecked==false)
-                {
-                    //NidaqPrepare.IsEnabled = false;
-                    StartButton.IsEnabled = false;
-                }
+                
             }
             catch (Exception ex)
             {
@@ -1174,44 +1262,54 @@ namespace kinect2_nidaq
         private void CheckTimer_Tick(object sender, EventArgs e)
         {
             // FreeMem in GB
-            if (Directory.Exists(SaveFolder))
+            try
             {
-                FileInfo PathInfo = new FileInfo(SaveFolder);
-                DriveInfo SaveDrive = new DriveInfo(PathInfo.Directory.Root.FullName);
-                Double FreeMem = SaveDrive.AvailableFreeSpace / 1e9;
-                Double AllMem = SaveDrive.TotalSize / 1e9;
-                StatusBarFreeSpace.Text = String.Format("{0} {1:0.##} / {2:0.##} GB Free", SaveDrive.RootDirectory, FreeMem, AllMem);
+                if (Directory.Exists(SaveFolder))
+                {
+                    FileInfo PathInfo = new FileInfo(SaveFolder);
+                    DriveInfo SaveDrive = new DriveInfo(PathInfo.Directory.Root.FullName);
+                    Double FreeMem = SaveDrive.AvailableFreeSpace / 1e9;
+                    Double AllMem = SaveDrive.TotalSize / 1e9;
+                    StatusBarFreeSpace.Text = String.Format("{0} {1:0.##} / {2:0.##} GB Free", SaveDrive.RootDirectory, FreeMem, AllMem);
+                }
             }
+            catch
+            {
+                StatusBarFreeSpace.Text = "N/A";
+            }
+            
             
             // Check Buffers?
 
-            string CPUPercent= "CPU "+(100-CPUPerformance.NextValue()).ToString("F1")+"% Free";
-            string RAMUsage = "RAM "+RAMPerformance.NextValue().ToString("F1")+"MB Free";
+            string CPUPercent= (100-CPUPerformance.NextValue()).ToString("F1")+"% Free";
+            string RAMUsage = RAMPerformance.NextValue().ToString("F1")+"MB Free";
             double MemUsed = GC.GetTotalMemory(true) / 1e6;
 
             StatusBarCPU.Text = CPUPercent;
             StatusBarRAM.Text = RAMUsage;
 
-            StatusBarFramesDropped.Text = String.Format("Dropped C{0} D{1} ",
+            StatusBarFramesDropped.Text = String.Format("Color {0} Depth {1} ",
                 ColorFramesDropped,
                 DepthFramesDropped);
 
             if (IsColorStreamEnabled == true)
             {
-                StatusBarColor.Value = ((double)ColorFrameCollection.Count / (double)Constants.kMaxFrames )*100; 
+                StatusBarColor.Value = ((double)ColorFrameCollection.Count / (double)Constants.kMaxFrames )*100;
+                ColorLight.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Green);
             }
 
             if (IsDepthStreamEnabled == true) 
             {
                 StatusBarColor.Value = ((double)DepthFrameCollection.Count / (double)Constants.kMaxFrames)*100;
+                DepthLight.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Green);
             }
 
             if (IsNidaqEnabled == true & IsRecordingEnabled == true)
             {
                 StatusBarNidaq.Value = ((double)NidaqQueue.Count / (double)Constants.nMaxBuffer) * 100;
+                NidaqLight.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Green);
             }
 
-            
             if (!ContinuousMode & RecTimer != null & IsRecordingEnabled)
             {
                 // running in timed mode, get the time left
@@ -1393,9 +1491,11 @@ namespace kinect2_nidaq
             SelectDirectory.IsEnabled = false;
             CheckColorStream.IsEnabled = false;
             CheckDepthStream.IsEnabled = false;
+            CheckNidaqStream.IsEnabled = false;
             CheckNoTimer.IsEnabled = false;
             RecordingTimeBox.IsEnabled = false;
             RecordingTimeText.IsEnabled = false;
+            PreviewMode.IsEnabled = false;
         }
 
         private void ActivateSettings()
@@ -1410,9 +1510,11 @@ namespace kinect2_nidaq
             SelectDirectory.IsEnabled = true;
             CheckColorStream.IsEnabled = true;
             CheckDepthStream.IsEnabled = true;
+            CheckNidaqStream.IsEnabled = true;
             CheckNoTimer.IsEnabled = true;
             RecordingTimeBox.IsEnabled = true;
             RecordingTimeText.IsEnabled = true;
+            PreviewMode.IsEnabled = true;
         }
 
         private void PreviewMode_Checked(object sender, RoutedEventArgs e)

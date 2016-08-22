@@ -12,13 +12,16 @@
         Loaded="Window_Loaded"
         ResizeMode="CanMinimize"
         WindowStyle="None"
-        Closing="Window_Closed">
+        Closing="Window_Closed"
+        Background="AliceBlue" 
+        BorderBrush="Black" 
+        BorderThickness="1">
 
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="30" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="30" />
+            <RowDefinition Height="50" />
         </Grid.RowDefinitions>
         <Grid Grid.Row="0">
             <Grid.ColumnDefinitions>
@@ -29,7 +32,7 @@
                 Exit
             </Button>
         </Grid>
-        <TabControl Grid.Row="1">
+        <TabControl Grid.Row="1" Background="AliceBlue">
             <TabItem Header="Session Settings">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -68,13 +71,13 @@
                         <TextBox Name="SamplingRateBox" Text="{Binding Source={x:Static properties:Settings.Default}, Path=SamplingRate}" TextChanged="SamplingRateBox_TextChanged" Grid.Row="6" />
                         <!--<Button Content="Prepare NIDaq" Name="NidaqPrepare" Click="NidaqPrepare_Click" Grid.Row="10" IsEnabled="False" /-->
                         <Button Content="Start Session"  Name="StartButton" Click="StartButton_Click"  Grid.Row="8" IsEnabled="False" />
-                        <Button Content="Stop Session" Name="StopButton" Click="StopButton_Click" Grid.Row="10" IsEnabled="False" /> 
+                        <Button Content="Stop Session" Name="StopButton" Click="StopButton_Click" Grid.Row="10" IsEnabled="False" />
                     </Grid>
                     <Grid Grid.Column="3">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="30" />
-                            <RowDefinition Height="45" />
                             <RowDefinition Height="*" />
+                            <RowDefinition Height="460" />
                             <RowDefinition Height="10" />
                         </Grid.RowDefinitions>
                         <TextBlock Text="Channel Selection" TextAlignment="Center" VerticalAlignment="Bottom" Grid.Row="1" />
@@ -97,24 +100,32 @@
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="30" />
-                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="8*" />
+                            <ColumnDefinition Width="21*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Session Name" Grid.Column="1" Grid.Row="1" TextAlignment="Center" VerticalAlignment="Bottom"/>
-                        <TextBox Name="SessionName" Grid.Column="1" Grid.Row="2" TextChanged="SessionName_TextChanged" Text="{Binding Source={x:Static properties:Settings.Default}, Path=SessionName}" />
-                        <TextBlock Text="Subject Name" Grid.Column="1" Grid.Row="3" TextAlignment="Center" VerticalAlignment="Bottom" />
-                        <TextBox Name="SubjectName" Grid.Column="1" Grid.Row="4" TextChanged="SubjectName_TextChanged" Text="{Binding Source={x:Static properties:Settings.Default}, Path=SubjectName}" />
-                        <TextBlock Text="Save Directory" Grid.Column="1" Grid.Row="5" TextAlignment="Center" VerticalAlignment="Bottom" />
+                        <TextBlock Text="Session Name" Grid.Column="1" Grid.Row="1" TextAlignment="Center" VerticalAlignment="Bottom" Grid.ColumnSpan="2"/>
+                        <TextBox Name="SessionName" Grid.Column="1" Grid.Row="2" TextChanged="SessionName_TextChanged" Text="{Binding Source={x:Static properties:Settings.Default}, Path=SessionName}" Grid.ColumnSpan="2" />
+                        <TextBlock Text="Subject Name" Grid.Column="1" Grid.Row="3" TextAlignment="Center" VerticalAlignment="Bottom" Grid.ColumnSpan="2" />
+                        <TextBox Name="SubjectName" Grid.Column="1" Grid.Row="4" TextChanged="SubjectName_TextChanged" Text="{Binding Source={x:Static properties:Settings.Default}, Path=SubjectName}" Grid.ColumnSpan="2" />
+                        <TextBlock Text="Save Directory" Grid.Column="1" Grid.Row="5" TextAlignment="Center" VerticalAlignment="Bottom" Grid.ColumnSpan="2" />
                         <Button Content="..." HorizontalAlignment="Left"  x:Name="SelectDirectory" Click="SelectDirectory_Click" Grid.Column="0" Grid.Row="6"/>
-                        <TextBox Name="FolderName" Grid.Column="1" Grid.Row="6" TextChanged="FolderName_TextChanged" Text="{Binding Source={x:Static properties:Settings.Default}, Path=FolderName}" />
-                        <Grid Grid.Row="8" Grid.Column="1">
+                        <TextBox Name="FolderName" Grid.Column="1" Grid.Row="6" TextChanged="FolderName_TextChanged" Text="{Binding Source={x:Static properties:Settings.Default}, Path=FolderName}" Grid.ColumnSpan="2" />
+                        <Grid Grid.Row="8" Grid.Column="1" Grid.ColumnSpan="2">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
                             <CheckBox Name="CheckNoTimer" VerticalAlignment="Center" Click="CheckNoTimer_Checked" >
                                 <TextBlock Text="Record until user clicks stop" VerticalAlignment="Center" />
                             </CheckBox>
-                            <Grid Grid.Column="1">
+                            <CheckBox VerticalAlignment="Center" Grid.Row="1" Grid.Column="0" Name="PreviewMode" Checked="PreviewMode_Checked" Unchecked="PreviewMode_Unchecked">
+                                <TextBlock Text="Preview Mode" />
+                            </CheckBox>
+                            <Grid Grid.Column="1" Grid.RowSpan="2">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="*" />
@@ -125,7 +136,7 @@
                                            HorizontalAlignment="Center"  />
                             </Grid>
                         </Grid>
-                        <Grid Grid.Row="10" Grid.Column="1">
+                        <Grid Grid.Row="10" Grid.Column="1" Grid.ColumnSpan="2">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
@@ -141,9 +152,7 @@
                             <CheckBox VerticalAlignment="Center" Grid.Row="1" Grid.Column="0" Name="CheckColorStream" >
                                 <TextBlock Text="Color Stream" />
                             </CheckBox>
-                            <CheckBox VerticalAlignment="Center" Grid.Row="1" Grid.Column="1" Name="PreviewMode" Checked="PreviewMode_Checked" Unchecked="PreviewMode_Unchecked">
-                                <TextBlock Text="Preview Mode" />
-                            </CheckBox>
+
                             <CheckBox VerticalAlignment="Center" Grid.Row="3" Grid.Column="0" Name="CheckNidaqStream">
                                 <TextBlock Text="Nidaq Stream" />
                             </CheckBox>
@@ -170,68 +179,112 @@
             </TabItem>
         </TabControl>
         <Grid Grid.Row="2">
-            <StatusBar>
+            <StatusBar Background="AliceBlue">
                 <StatusBar.ItemsPanel>
                     <ItemsPanelTemplate>
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="95" />
+                                <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="250" />
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="100" />
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="160" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="150" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="100" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="100" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                         </Grid>
                     </ItemsPanelTemplate>
                 </StatusBar.ItemsPanel>
                 <StatusBarItem Grid.Column="0">
                     <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="35" />
+                            <ColumnDefinition Width="30" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*" />
                             <RowDefinition Height="*" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
-                        <ProgressBar Value="0" Width="85" Height="8" Name="StatusBarColor"/>
-                        <ProgressBar Value="0" Width="85" Height="8" Name="StatusBarDepth" Grid.Row="1" />
-                        <ProgressBar Value="0" Width="85" Height="8" Name="StatusBarNidaq" Grid.Row="2" />
+                        <TextBlock Text="Color" Grid.Row="0" Grid.Column="0" FontSize="11" />
+                        <TextBlock Text="Depth" Grid.Row="1" Grid.Column="0" FontSize="11" />
+                        <TextBlock Text="Nidaq" Grid.Row="2" Grid.Column="0" FontSize="11" />
+                        <Rectangle Width="15" Name="ColorLight" Height="10" Grid.Row="0" Grid.Column="1" Fill="Red" />
+                        <Rectangle Width="15" Name="DepthLight" Height="10" Grid.Row="1" Grid.Column="1" Fill="Red" />
+                        <Rectangle Width="15" Name="NidaqLight" Height="10" Grid.Row="2" Grid.Column="1" Fill="Red" />
+                        <ProgressBar Value="0" Width="100" Height="10" Name="StatusBarColor" Grid.Row="0" Grid.Column="2" />
+                        <ProgressBar Value="0" Width="100" Height="10" Name="StatusBarDepth" Grid.Row="1" Grid.Column="2" />
+                        <ProgressBar Value="0" Width="100" Height="10" Name="StatusBarNidaq" Grid.Row="2" Grid.Column="2" />
                     </Grid>
                 </StatusBarItem>
                 <Separator Grid.Column="1" />
-            
+
                 <StatusBarItem Grid.Column="2">
                     <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="20" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="20" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <ProgressBar Value="0" Width="85" Height="16" Name="StatusBarProgress" IsEnabled="False" />
-                        <TextBlock Text="ETA: " Name="StatusBarProgressETA" Width="140" Grid.Column="2" IsEnabled="False" />
+                        <TextBlock Text="Progress" HorizontalAlignment="Center"/>
+                        <ProgressBar Value="0" Width="85" Height="16" Name="StatusBarProgress" Grid.Row="1" IsEnabled="False" />
+                        <TextBlock Text="ETA: " Name="StatusBarProgressETA" Width="140" Grid.Row="1" Grid.Column="2" IsEnabled="False" />
                     </Grid>
                 </StatusBarItem>
                 <Separator Grid.Column="3" />
                 <StatusBarItem Grid.Column="4">
-                    <TextBlock Name="StatusBarFramesDropped" TextAlignment="Center" />
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="20" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Frames Dropped" TextAlignment="Center" />
+                        <TextBlock Name="StatusBarFramesDropped" TextAlignment="Center" Grid.Row="1" />
+                    </Grid>
                 </StatusBarItem>
                 <Separator Grid.Column="5" />
                 <StatusBarItem Grid.Column="6">
-                    <TextBlock Name="StatusBarFreeSpace" TextAlignment="Center"/>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="20" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Hard drive space" TextAlignment="Center" HorizontalAlignment="Center"/>
+                        <TextBlock Name="StatusBarFreeSpace" TextAlignment="Center" HorizontalAlignment="Center" Grid.Row="1"/>
+                    </Grid>
                 </StatusBarItem>
                 <Separator Grid.Column="7" />
                 <StatusBarItem Grid.Column="8">
-                    <TextBlock Name="StatusBarRAM" TextAlignment="Center"/>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="20" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="RAM" TextAlignment="Center"/>
+                        <TextBlock Name="StatusBarRAM" TextAlignment="Center" Grid.Row="1"/>
+                    </Grid>
                 </StatusBarItem>
                 <Separator Grid.Column="9" />
                 <StatusBarItem Grid.Column="10">
-                    <TextBlock Name="StatusBarCPU" TextAlignment="Center" />
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="20" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="CPU Usage" TextAlignment="Center"/>
+                        <TextBlock Name="StatusBarCPU" TextAlignment="Center" Grid.Row="1"/>
+                    </Grid>
                 </StatusBarItem>
                 <Separator Grid.Column="11" />
                 <StatusBarItem Grid.Column="12" >
