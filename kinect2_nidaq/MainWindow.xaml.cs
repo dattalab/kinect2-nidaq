@@ -368,6 +368,7 @@ namespace kinect2_nidaq
             else
             {
                 IsRecordingEnabled = true;
+                IsPreviewEnabled = false;
             }
 
             // Only create new files if we're not in preview mode
@@ -473,6 +474,8 @@ namespace kinect2_nidaq
         /// <param name="e"></param>
         private void Window_Closed(object sender, CancelEventArgs e)
         {
+
+
             if (!IsSessionClean && IsRecordingEnabled == true)
             {
                 MessageBoxResult dr = MessageBox.Show("You have not stopped the session, stop and cleanup now?", "Session stop", MessageBoxButton.YesNo);
@@ -513,12 +516,12 @@ namespace kinect2_nidaq
         {
             // Dispose of the Kinect and the readers
 
-            resetEvent = new AutoResetEvent(false);             
+            resetEvent = new AutoResetEvent(false);
 
             // Save the UI settings
 
             kinect2_nidaq.Properties.Settings.Default.Save();
-
+            
             // Stop the sensor and the image display
 
             sensor.Close();
@@ -620,9 +623,14 @@ namespace kinect2_nidaq
 
             // If we were recording and the data isn't compressed, compress it!
 
-            if (!IsDataCompressed && IsRecordingEnabled == true)
+            if (!IsDataCompressed && IsRecordingEnabled)
             {
                 CompressTask = System.Threading.Tasks.Task.Factory.StartNew(CompressSession, fCancellationTokenSource.Token);
+            }
+            else if (IsPreviewEnabled)
+            {
+                ActivateSettings();
+                SettingsChanged();
             }
 
             // now everything has been shut off, set all the flags accordingly
@@ -748,7 +756,8 @@ namespace kinect2_nidaq
 
             StopButton.IsEnabled = false;
             SessionCleanup();
-            ActivateSettings();
+   
+
         }
 
         /// <summary>
@@ -1144,7 +1153,9 @@ namespace kinect2_nidaq
 
                 // else if notimer is selected, disable time related options
                 // else if recording time box is specified correctly, then convert recording time to minutes
-                // else everything enabled                
+                // else everything enabled          
+      
+                // how do the nidaq options look?
 
                 if (aiChannelList.SelectedItems.Count > 0 && DevBox.Items.Count > 0 && (SamplingRate > 0 && SamplingRate < MaxRate))
                 {
@@ -1158,17 +1169,19 @@ namespace kinect2_nidaq
                 
                 if (PreviewMode.IsChecked == true)
                 {
+                    // if preview is checked, enabled the camera streams and disable nidaq
                     StartButton.IsEnabled = true;
                     CheckDepthStream.IsChecked = true;
                     CheckColorStream.IsChecked = true;
                     CheckNidaqStream.IsChecked = false;
+                    CheckNidaqStream.IsEnabled = false;
                     CheckNoTimer.IsChecked = false;
                     CheckNoTimer.IsEnabled = false;
                     RecordingTimeBox.IsEnabled = false;
                 }
                 else if (CheckNoTimer.IsChecked == true)
                 {
-                    
+                    // we're in continuous mode if this case
                     ContinuousMode = true;
                     RecordingTimeText.IsEnabled = false;
                     RecordingTimeBox.IsEnabled = false;
@@ -1177,6 +1190,7 @@ namespace kinect2_nidaq
                 else if (RecordingTimeBox.Text.Length > 0 & double.TryParse(RecordingTimeBox.Text, out tmp) == true)
                 {
                     
+                    // if we have anything in the time box, then disable the continuous button
                     CheckNoTimer.IsEnabled = false;
                     ContinuousMode = false;
                     RecordingTime = Convert.ToDouble(RecordingTimeBox.Text) * 60e3;
@@ -1184,6 +1198,7 @@ namespace kinect2_nidaq
                 }
                 else
                 {
+                    // otherwise, leave things enabled
                     TimeFlag=false;
                     //StatusBarSessionProgress.IsEnabled = false;
                     ContinuousMode = true;
@@ -1222,18 +1237,26 @@ namespace kinect2_nidaq
                         new string[] { FilePath_Nidaq, "nidaq.dat" }
                       };
 
+                    // we've gotten this far, meaning the preview button was not selected, and we want to record
+                    // if any of the files overwrite old data or cannot be created, NO GO 
+
                     if (FilePaths.All(p => !File.Exists(p[0])) && !File.Exists(FilePath_Tar) &&  Directory.Exists(SaveFolder))
                     {
                         //NidaqPrepare.IsEnabled = true;
                         StartButton.IsEnabled = true;
                     }
-                    else if (PreviewMode.IsChecked == false)
+                    else 
                     {
                         //NidaqPrepare.IsEnabled = false;
                         StartButton.IsEnabled = false;
                     }
                     
 
+                }
+                else if (PreviewMode.IsChecked == false)
+                {
+                    // this means the preview button wasn't checked but one of the other conditions failed
+                    StartButton.IsEnabled = false;
                 }
                 
             }
@@ -1342,8 +1365,7 @@ namespace kinect2_nidaq
             if (IsRecordingEnabled == true)
             {
                 StatusBarSessionText.Text = "Recording";
-                InactivateSettings();
-                
+                //InactivateSettings();
             }
             else if (IsPreviewEnabled)
             {
@@ -1364,8 +1386,12 @@ namespace kinect2_nidaq
                 }
                 else
                 {
-                    ActivateSettings();
-                    
+                    //ActivateSettings();
+                    if (!SubjectName.IsEnabled)
+                    {
+                        ActivateSettings();
+                        SettingsChanged();
+                    }
                     StatusBarProgress.Value = 100;
                     StatusBarProgressETA.Text = "ETA: (0 mins, 0 secs)";
                     StatusBarSessionText.Text = "Done";

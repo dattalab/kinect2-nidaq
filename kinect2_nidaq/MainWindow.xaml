@@ -70,8 +70,7 @@
                         <TextBlock Text="Sampling Rate" Grid.Row="5" TextAlignment="Center" VerticalAlignment="Bottom" />
                         <TextBox Name="SamplingRateBox" Text="{Binding Source={x:Static properties:Settings.Default}, Path=SamplingRate}" TextChanged="SamplingRateBox_TextChanged" Grid.Row="6" />
                         <!--<Button Content="Prepare NIDaq" Name="NidaqPrepare" Click="NidaqPrepare_Click" Grid.Row="10" IsEnabled="False" /-->
-                        <Button Content="Start Session"  Name="StartButton" Click="StartButton_Click"  Grid.Row="8" IsEnabled="False" />
-                        <Button Content="Stop Session" Name="StopButton" Click="StopButton_Click" Grid.Row="10" IsEnabled="False" />
+                        
                     </Grid>
                     <Grid Grid.Column="3">
                         <Grid.RowDefinitions>
@@ -136,16 +135,16 @@
                                            HorizontalAlignment="Center"  />
                             </Grid>
                         </Grid>
-                        <Grid Grid.Row="10" Grid.Column="1" Grid.ColumnSpan="2">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
+                        <Grid Grid.Row="10" Grid.Column="1" Grid.ColumnSpan="2" >
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*" />
                                 <RowDefinition Height="*" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
                             <CheckBox VerticalAlignment="Center" Name="CheckDepthStream">
                                 <TextBlock Text="Depth Stream" />
                             </CheckBox>
@@ -156,7 +155,17 @@
                             <CheckBox VerticalAlignment="Center" Grid.Row="3" Grid.Column="0" Name="CheckNidaqStream">
                                 <TextBlock Text="Nidaq Stream" />
                             </CheckBox>
+                            <Grid Grid.Row="0" Grid.Column="1" Grid.RowSpan="3" >
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="10" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button Content="Start Session"  Name="StartButton" Click="StartButton_Click" IsEnabled="False" Grid.Column="0" Height="35"  Background="LightGreen"/>
+                                <Button Content="Stop Session" Name="StopButton" Click="StopButton_Click" IsEnabled="False" Grid.Column="2" Height="35" Background="LightSalmon"/>
+                            </Grid>
                         </Grid>
+                        
                     </Grid>
                 </Grid>
             </TabItem>
