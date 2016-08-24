@@ -171,19 +171,60 @@
             </TabItem>
             <TabItem Header="Kinect Preview">
                 <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="30" />
+                        <RowDefinition Height="424" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="512" />
+                        <ColumnDefinition Width="512" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Color" HorizontalAlignment="Center" FontSize="15"/>
+                    <TextBlock Text="Depth" HorizontalAlignment="Center" FontSize="15" Grid.Column="1"/>
                     <Image
                         x:Name="ColorDisplay"
                         Height="424"
                         Width="512"
                         Stretch="UniformToFill"
                         VerticalAlignment="Top"
-                        HorizontalAlignment="Left"/>
+                        HorizontalAlignment="Left" Grid.Row="1"/>
                     <Image x:Name="DepthDisplay"
                        HorizontalAlignment="Right"
                        Height="424"
                        Width="512"
                        Stretch="UniformToFill"
-                       VerticalAlignment="Top"/>
+                       VerticalAlignment="Top" Grid.Row="1" Grid.Column="1" RenderTransformOrigin="0.5, 0.5"/>
+                    <Grid Grid.Row="2" Grid.Column="1" >
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="10" />
+                            <ColumnDefinition Width="50" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="10" />
+                            <ColumnDefinition Width="50" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Min distance (mm)" HorizontalAlignment="Center" VerticalAlignment="Bottom"/>
+                        <Slider Name="DepthMinSlider" Maximum="1000" Minimum="0"
+                                IsSnapToTickEnabled="False" TickFrequency="100" TickPlacement="BottomRight" Grid.Row="1" 
+                                Value="{Binding Source={x:Static properties:Settings.Default}, Path=DepthMinValue}" />
+                        <TextBox Name="DepthMinBox"
+                                 Text="{Binding ElementName=DepthMinSlider, Path=Value, UpdateSourceTrigger=PropertyChanged}"
+                                 Grid.Row="1" Grid.Column="2"/>
+                        <TextBlock Text="Max distance (mm)" HorizontalAlignment="Center" VerticalAlignment="Bottom" Grid.Column="3"/>
+                        <Slider Name="DepthMaxSlider" Maximum="1000" Minimum="0" 
+                                IsSnapToTickEnabled="False" TickFrequency="100" TickPlacement="BottomRight" Grid.Row="1"
+                                Grid.Column="3" Value="{Binding Source={x:Static properties:Settings.Default}, Path=DepthMaxValue}" />
+                        <TextBox Name="DepthMaxBox" 
+                                 Text="{Binding ElementName=DepthMaxSlider, Path=Value, UpdateSourceTrigger=PropertyChanged}"
+                                 Grid.Row="1" Grid.Column="5"/>
+                        <CheckBox Name="FlipDepth" Content="Un-mirror-flip image" Grid.Row="2" HorizontalAlignment="Center" Checked="FlipDepth_Checked" Unchecked="FlipDepth_Unchecked" />
+                    </Grid>
                 </Grid>
             </TabItem>
         </TabControl>

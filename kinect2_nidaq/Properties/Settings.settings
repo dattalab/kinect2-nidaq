@@ -14,5 +14,11 @@
     <Setting Name="SubjectName" Type="System.String" Scope="User">
       <Value Profile="(Default)">Animal 1</Value>
     </Setting>
+    <Setting Name="DepthMinValue" Type="System.UInt16" Scope="User">
+      <Value Profile="(Default)">2000</Value>
+    </Setting>
+    <Setting Name="DepthMaxValue" Type="System.UInt16" Scope="User">
+      <Value Profile="(Default)">5000</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

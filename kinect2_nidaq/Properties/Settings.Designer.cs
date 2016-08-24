@@ -70,5 +70,29 @@ namespace kinect2_nidaq.Properties {
                 this["SubjectName"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("2000")]
+        public ushort DepthMinValue {
+            get {
+                return ((ushort)(this["DepthMinValue"]));
+            }
+            set {
+                this["DepthMinValue"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("5000")]
+        public ushort DepthMaxValue {
+            get {
+                return ((ushort)(this["DepthMaxValue"]));
+            }
+            set {
+                this["DepthMaxValue"] = value;
+            }
+        }
     }
 }

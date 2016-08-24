@@ -236,7 +236,7 @@ namespace kinect2_nidaq
         private bool ContinuousMode = true;
         private double RecordingTime;
         private DateTime RecStartTime;
-        private DateTime RecEndTime;
+        private DateTime RecEndTime; 
 
         NationalInstruments.PrecisionDateTime[] TmpTimeStamp;
         double CurrentNITimeStamp;
@@ -1554,6 +1554,20 @@ namespace kinect2_nidaq
         {
             SettingsChanged();
             //ActivateSettings();
+        }
+
+        // Flip it!
+
+        private void FlipDepth_Checked(object sender, RoutedEventArgs e)
+        {
+            System.Windows.Media.RotateTransform rotateTransform = new System.Windows.Media.RotateTransform(180);
+            DepthDisplay.RenderTransform = rotateTransform;
+        }
+
+        private void FlipDepth_Unchecked(object sender, RoutedEventArgs e)
+        {
+            System.Windows.Media.RotateTransform rotateTransform = new System.Windows.Media.RotateTransform(0);
+            DepthDisplay.RenderTransform = rotateTransform;
         }
  
     }

@@ -78,24 +78,43 @@ namespace Sensor
 
             PixelFormat format = PixelFormats.Bgr32;
 
-            ushort minDepth = e.DepthMinReliableDistance;
-            ushort maxDepth = e.DepthMaxReliableDistance;
+            //ushort minDepth = e.DepthMinReliableDistance;
+            //ushort maxDepth = e.DepthMaxReliableDistance;
+            
+            ushort minDepth = kinect2_nidaq.Properties.Settings.Default.DepthMinValue;
+            ushort maxDepth = kinect2_nidaq.Properties.Settings.Default.DepthMaxValue;
+
+            minDepth = (ushort)(minDepth >= 0 ? minDepth : 1);
+            maxDepth = (ushort)(maxDepth > minDepth ? maxDepth : minDepth + 1);
+
             byte[] pixels = new byte[e.Width * e.Height * (format.BitsPerPixel + 7) / 8];
-
             int colorIndex = 0;
-            byte den = (byte)(maxDepth - minDepth);
-
+            
             for (int depthIndex = 0; depthIndex < e.DepthData.Length; ++depthIndex)
             {
 
                 ushort depth = e.DepthData[depthIndex];
 
-                byte intensity = (byte)(depth >= minDepth ? depth : 0);
-                intensity = (byte)(depth <= maxDepth ? depth : 0);
+                //byte intensity = (byte)(depth >= minDepth ? depth : 0);
+                //intensity = (byte)(depth <= maxDepth ? depth : 0);
+
+                float intensity = (float)(depth);
                 
-                pixels[colorIndex++] = intensity;
-                pixels[colorIndex++] = intensity;
-                pixels[colorIndex++] = intensity;
+                intensity = (intensity >= minDepth ? intensity : -1);
+                intensity = (intensity <= maxDepth ? intensity : -1);
+                intensity = (intensity - minDepth) / (maxDepth - minDepth);
+
+                // negative values are mapped to 1 (which becomes 0)
+
+                intensity = (intensity < 0 ? 1 : intensity);
+
+                // from float to byte (256 values)
+
+                byte intensityB = (byte)(255*(1-intensity));
+
+                pixels[colorIndex++] = intensityB;
+                pixels[colorIndex++] = intensityB;
+                pixels[colorIndex++] = intensityB;
 
                 ++colorIndex;
 
@@ -105,6 +124,7 @@ namespace Sensor
             WriteableBitmap bitmap;
             bitmap = new WriteableBitmap(e.Width, e.Height, Constants.kDpi, Constants.kDpi, Constants.kFormat, null);
             bitmap.WritePixels(new Int32Rect(0, 0, e.Width, e.Height), pixels, stride, 0);
+            
             return bitmap;
 
 
