@@ -304,6 +304,7 @@ namespace kinect2_nidaq
                 {
                     DevBox.SelectedIndex = 0;
                     TerminalConfigBox.SelectedIndex = 0;
+                    VoltageRangeBox.SelectedIndex = 0;
                 }
                 else
                 {
@@ -1047,6 +1048,13 @@ namespace kinect2_nidaq
                 NidaqFile = new FileStream(FilePath_Nidaq, FileMode.Append);
                 NidaqStream = new BinaryWriter(NidaqFile);
 
+                var voltageRangeSelect = VoltageRangeBox.SelectedItem;
+                string voltageRangeTmp = voltageRangeSelect.ToString();
+                string[] voltageRangeParse = voltageRangeTmp.Split(' ');
+
+                Console.WriteLine(voltageRangeParse[0]);
+                Console.WriteLine(voltageRangeParse[1]);
+                
                 foreach (var Channel in aiChannelList.SelectedItems)
                 {
                     ChannelString = String.Format("{0} {1},", ChannelString, Channel.ToString());
@@ -1058,8 +1066,8 @@ namespace kinect2_nidaq
                     ChannelString,
                     "",
                     MyTerminalConfig,
-                    0,
-                    5,
+                    Convert.ToDouble(voltageRangeParse[0]),
+                    Convert.ToDouble(voltageRangeParse[1]),
                     AIVoltageUnits.Volts);
 
                 AnalogInTask.Timing.ConfigureSampleClock("", SamplingRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, 1);
@@ -1107,9 +1115,9 @@ namespace kinect2_nidaq
                 TerminalConfigBox.Items.Add(TerminalConfig);
             }
 
-            foreach (var Range in RangeList)
+            for (int i = 0; i < RangeList.Length; i=i+2 )
             {
-                VoltageRangeBox.Items.Add(Range.ToString());
+                VoltageRangeBox.Items.Add(String.Format("{0} {1}",RangeList[i],RangeList[i+1]));
             }
 
             MaxRate = DaqSystem.Local.LoadDevice(DevSelection).AIMaximumMultiChannelRate;
@@ -1472,6 +1480,7 @@ namespace kinect2_nidaq
                 fMetadata.NidaqTerminalConfiguration = TerminalConfigBox.SelectedItem.ToString();
                 fMetadata.NidaqChannelNames = new string[aiChannelList.SelectedItems.Count];
                 fMetadata.NidaqSamplingRate = SamplingRate;
+                fMetadata.NidaqVoltageRange = VoltageRangeBox.SelectedItem.ToString();
 
                 Type t = typeof(NidaqData);
                 System.Reflection.PropertyInfo t2 = t.GetProperty("Data");

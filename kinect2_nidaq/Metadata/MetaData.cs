@@ -52,6 +52,12 @@ namespace Metadata
             set;
         }
 
+        public String NidaqVoltageRange
+        {
+            get;
+            set;
+        }
+
         public int[] DepthResolution
         {
             get;

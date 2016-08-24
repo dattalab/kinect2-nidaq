@@ -37,13 +37,12 @@
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="20" />
-                        <ColumnDefinition Width="150" />
-                        <ColumnDefinition Width="20" />
-                        <ColumnDefinition Width="200" />
-                        <ColumnDefinition Width="20" />
+                        <ColumnDefinition Width="350" />
+                        <ColumnDefinition Width="50" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="20" />
                     </Grid.ColumnDefinitions>
+                    <GridSplitter Grid.Column="2" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Width="5" Background="Gray"/>
                     <Grid Grid.Column="1">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="30" />
@@ -63,28 +62,28 @@
                             <RowDefinition Height="40" />
                             <RowDefinition Height="10" />
                         </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="20" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="NI-DAQ" FontSize="15" HorizontalAlignment="Center" Grid.ColumnSpan="3" VerticalAlignment="Bottom" FontWeight="Black"/>
                         <TextBlock Text="Device" Grid.Row="1" TextAlignment="Center" VerticalAlignment="Bottom"/>
                         <ComboBox Name="DevBox" SelectionChanged="DevBox_SelectionChanged" Grid.Row="2" />
                         <TextBlock Text="Terminal Configuration" Grid.Row="3" TextAlignment="Center" VerticalAlignment="Bottom"/>
                         <ComboBox Name="TerminalConfigBox" Grid.Row="4" />
-                        <TextBlock Text="Voltage Range" Grid.Row="5" TextAlignment="Center"  VerticalAlignment="Bottom"/>
+                        <TextBlock Text="Voltage Range (Volts)" Grid.Row="5" TextAlignment="Center"  VerticalAlignment="Bottom"/>
                         <ComboBox Name="VoltageRangeBox" Grid.Row="6" />
-                        <TextBlock Text="Sampling Rate" Grid.Row="7" TextAlignment="Center" VerticalAlignment="Bottom" />
+                        <TextBlock Text="Sampling Rate (Hz)" Grid.Row="7" TextAlignment="Center" VerticalAlignment="Bottom" />
                         <TextBox Name="SamplingRateBox" Text="{Binding Source={x:Static properties:Settings.Default}, Path=SamplingRate}" TextChanged="SamplingRateBox_TextChanged" Grid.Row="8" />
                         <!--<Button Content="Prepare NIDaq" Name="NidaqPrepare" Click="NidaqPrepare_Click" Grid.Row="10" IsEnabled="False" /-->
-                        
+                        <TextBlock Text="Channel Selection" TextAlignment="Center" VerticalAlignment="Bottom" Grid.Row="1" Grid.Column="2" />
+                        <ListBox Name="aiChannelList" SelectionMode="Extended" SelectionChanged="ChannelSelection_Changed" Grid.Row="2" Grid.Column="2" Grid.RowSpan="10" />
+
                     </Grid>
+                    
+                       
                     <Grid Grid.Column="3">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="30" />
-                            <RowDefinition Height="*" />
-                            <RowDefinition Height="460" />
-                            <RowDefinition Height="10" />
-                        </Grid.RowDefinitions>
-                        <TextBlock Text="Channel Selection" TextAlignment="Center" VerticalAlignment="Bottom" Grid.Row="1" />
-                        <ListBox Name="aiChannelList" SelectionMode="Extended" Grid.Row="2" SelectionChanged="ChannelSelection_Changed" />
-                    </Grid>
-                    <Grid Grid.Column="5">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="30" />
                             <RowDefinition Height="*" />
@@ -104,6 +103,7 @@
                             <ColumnDefinition Width="8*" />
                             <ColumnDefinition Width="21*"/>
                         </Grid.ColumnDefinitions>
+                        <TextBlock Text="Kinect" FontSize="15" HorizontalAlignment="Center" Grid.ColumnSpan="3" VerticalAlignment="Bottom" FontWeight="Black"/>
                         <TextBlock Text="Session Name" Grid.Column="1" Grid.Row="1" TextAlignment="Center" VerticalAlignment="Bottom" Grid.ColumnSpan="2"/>
                         <TextBox Name="SessionName" Grid.Column="1" Grid.Row="2" TextChanged="SessionName_TextChanged" Text="{Binding Source={x:Static properties:Settings.Default}, Path=SessionName}" Grid.ColumnSpan="2" />
                         <TextBlock Text="Subject Name" Grid.Column="1" Grid.Row="3" TextAlignment="Center" VerticalAlignment="Bottom" Grid.ColumnSpan="2" />
@@ -238,7 +238,7 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="250" />
+                                <ColumnDefinition Width="215" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="100" />
                                 <ColumnDefinition Width="Auto" />
@@ -285,17 +285,17 @@
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="20" />
+                            <ColumnDefinition Width="60" />
+                            <ColumnDefinition Width="10" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="Progress" HorizontalAlignment="Center"/>
-                        <ProgressBar Value="0" Width="85" Height="16" Name="StatusBarProgress" Grid.Row="1" IsEnabled="False" />
+                        <ProgressBar Value="0" Width="Auto" Height="16" Name="StatusBarProgress" Grid.Row="1" IsEnabled="False" />
                         <TextBlock Text="ETA: " Name="StatusBarProgressETA" Width="140" Grid.Row="1" Grid.Column="2" IsEnabled="False" />
                     </Grid>
                 </StatusBarItem>
                 <Separator Grid.Column="3" />
-                <StatusBarItem Grid.Column="4">
+                <StatusBarItem Grid.Column="4" HorizontalAlignment="Center">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="20" />
@@ -306,7 +306,7 @@
                     </Grid>
                 </StatusBarItem>
                 <Separator Grid.Column="5" />
-                <StatusBarItem Grid.Column="6">
+                <StatusBarItem Grid.Column="6" HorizontalAlignment="Center">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="20" />
@@ -317,7 +317,7 @@
                     </Grid>
                 </StatusBarItem>
                 <Separator Grid.Column="7" />
-                <StatusBarItem Grid.Column="8">
+                <StatusBarItem Grid.Column="8" HorizontalAlignment="Center">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="20" />
@@ -328,7 +328,7 @@
                     </Grid>
                 </StatusBarItem>
                 <Separator Grid.Column="9" />
-                <StatusBarItem Grid.Column="10">
+                <StatusBarItem Grid.Column="10" HorizontalAlignment="Center">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="20" />
@@ -339,8 +339,8 @@
                     </Grid>
                 </StatusBarItem>
                 <Separator Grid.Column="11" />
-                <StatusBarItem Grid.Column="12" >
-                    <TextBlock Name="StatusBarSessionText" TextAlignment="Center" />
+                <StatusBarItem Grid.Column="12" HorizontalAlignment="Center" >
+                    <TextBlock Name="StatusBarSessionText" TextAlignment="Center" FontSize="15" FontWeight="SemiBold"/>
                 </StatusBarItem>
             </StatusBar>
         </Grid>
