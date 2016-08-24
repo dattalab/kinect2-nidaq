@@ -67,8 +67,10 @@
                         <ComboBox Name="DevBox" SelectionChanged="DevBox_SelectionChanged" Grid.Row="2" />
                         <TextBlock Text="Terminal Configuration" Grid.Row="3" TextAlignment="Center" VerticalAlignment="Bottom"/>
                         <ComboBox Name="TerminalConfigBox" Grid.Row="4" />
-                        <TextBlock Text="Sampling Rate" Grid.Row="5" TextAlignment="Center" VerticalAlignment="Bottom" />
-                        <TextBox Name="SamplingRateBox" Text="{Binding Source={x:Static properties:Settings.Default}, Path=SamplingRate}" TextChanged="SamplingRateBox_TextChanged" Grid.Row="6" />
+                        <TextBlock Text="Voltage Range" Grid.Row="5" TextAlignment="Center"  VerticalAlignment="Bottom"/>
+                        <ComboBox Name="VoltageRangeBox" Grid.Row="6" />
+                        <TextBlock Text="Sampling Rate" Grid.Row="7" TextAlignment="Center" VerticalAlignment="Bottom" />
+                        <TextBox Name="SamplingRateBox" Text="{Binding Source={x:Static properties:Settings.Default}, Path=SamplingRate}" TextChanged="SamplingRateBox_TextChanged" Grid.Row="8" />
                         <!--<Button Content="Prepare NIDaq" Name="NidaqPrepare" Click="NidaqPrepare_Click" Grid.Row="10" IsEnabled="False" /-->
                         
                     </Grid>

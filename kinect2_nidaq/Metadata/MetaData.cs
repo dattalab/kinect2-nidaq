@@ -40,6 +40,12 @@ namespace Metadata
             set;
         }
 
+        public double NidaqSamplingRate
+        {
+            get;
+            set;
+        }
+
         public String NidaqDataType
         {
             get;

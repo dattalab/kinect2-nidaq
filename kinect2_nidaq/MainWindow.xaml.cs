@@ -139,9 +139,14 @@ namespace kinect2_nidaq
         /// </summary>
         System.Threading.Tasks.Task DepthDumpTask;
 
-
+        /// <summary>
+        /// Compression task
+        /// </summary>
         System.Threading.Tasks.Task CompressTask;
 
+        /// <summary>
+        /// Timer for the recording
+        /// </summary>
         DispatcherTimer RecTimer;
 
         /// <summary>
@@ -158,7 +163,10 @@ namespace kinect2_nidaq
         /// How many depth frames dropped?
         /// </summary>
         private int DepthFramesDropped = 0;
-
+        
+        /// <summary>
+        /// Stores metadata
+        /// </summary>
         private kMetadata fMetadata = new kMetadata();
 
         /// <summary>
@@ -182,8 +190,12 @@ namespace kinect2_nidaq
         private bool IsDataCompressed = false;
         private bool IsSessionClean = false;
         private bool IsNidaqEnabled = false;
+        private bool IsNidaqDevice = true;
         private bool IsPreviewEnabled = false;
 
+        /// <summary>
+        /// Video writer timespan
+        /// </summary>
         private TimeSpan VideoWriterInitialTimeSpan;
 
         /// <summary>
@@ -212,6 +224,9 @@ namespace kinect2_nidaq
         /// </summary>
         private String SaveFolder;
         
+        /// <summary>
+        /// All of the files!
+        /// </summary>
         private FileStream NidaqFile;
         private BinaryWriter NidaqStream;
 
@@ -228,6 +243,7 @@ namespace kinect2_nidaq
         private DepthFrameEventArgs depthEventArgs;
 
         private AnalogWaveform<double>[] Waveforms;
+        
         private double tarballProgress;
         private AutoResetEvent resetEvent;
         private List<string[]> FilePaths;
@@ -292,12 +308,12 @@ namespace kinect2_nidaq
                 else
                 {
                     // Inactive the Nidaq stream if we didn't find any devices
-
-                    CheckNidaqStream.IsChecked = false;
-                    CheckNidaqStream.IsEnabled = false;
-                    DevBox.IsEnabled = false;
-                    SamplingRateBox.IsEnabled = false;
-                    aiChannelList.IsEnabled = false;
+                    IsNidaqDevice = false;
+                    //CheckNidaqStream.IsChecked = false;
+                    //CheckNidaqStream.IsEnabled = false;
+                    //DevBox.IsEnabled = false;
+                    //SamplingRateBox.IsEnabled = false;
+                    //aiChannelList.IsEnabled = false;
 
                 }
 
@@ -460,6 +476,11 @@ namespace kinect2_nidaq
             
         }
 
+        /// <summary>
+        /// What do do when the timer runs out
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         void RecTimer_Tick(object sender, EventArgs e)
         {
             StopButton.IsEnabled = false;
@@ -1041,7 +1062,6 @@ namespace kinect2_nidaq
                     5,
                     AIVoltageUnits.Volts);
 
-
                 AnalogInTask.Timing.ConfigureSampleClock("", SamplingRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, 1);
                 AnalogInTask.Control(TaskAction.Verify);
 
@@ -1074,6 +1094,7 @@ namespace kinect2_nidaq
             string[] ChannelList = DaqSystem.Local.LoadDevice(DevSelection).AIPhysicalChannels;
             string[] TerminalList = Enum.GetNames(typeof(AITerminalConfiguration));
             string[] UnitsList = Enum.GetNames(typeof(AIVoltageUnits));
+            double[] RangeList = DaqSystem.Local.LoadDevice(DevSelection).AIVoltageRanges;
 
             foreach (var Channel in ChannelList)
             {
@@ -1084,6 +1105,11 @@ namespace kinect2_nidaq
             foreach (var TerminalConfig in TerminalList)
             {
                 TerminalConfigBox.Items.Add(TerminalConfig);
+            }
+
+            foreach (var Range in RangeList)
+            {
+                VoltageRangeBox.Items.Add(Range.ToString());
             }
 
             MaxRate = DaqSystem.Local.LoadDevice(DevSelection).AIMaximumMultiChannelRate;
@@ -1157,7 +1183,20 @@ namespace kinect2_nidaq
       
                 // how do the nidaq options look?
 
-                if (aiChannelList.SelectedItems.Count > 0 && DevBox.Items.Count > 0 && (SamplingRate > 0 && SamplingRate < MaxRate))
+                // disable the nidaq stuff if there's no nidaq device
+
+                if (!IsNidaqDevice)
+                {
+                    DevBox.IsEnabled = false;
+                    SamplingRateBox.IsEnabled = false;
+                    aiChannelList.IsEnabled = false;
+                    TerminalConfigBox.IsEnabled = false;
+                }
+
+                // if there is a nidaq and settings look good, let the user record nidaq data
+
+                if (IsNidaqDevice && aiChannelList.SelectedItems.Count > 0 && DevBox.Items.Count > 0
+                    && (SamplingRate > 0 && SamplingRate < MaxRate))
                 {
                     CheckNidaqStream.IsEnabled = true;
                 }
@@ -1181,7 +1220,7 @@ namespace kinect2_nidaq
                 }
                 else if (CheckNoTimer.IsChecked == true)
                 {
-                    // we're in continuous mode if this case
+                    // we're in continuous mode in this case
                     ContinuousMode = true;
                     RecordingTimeText.IsEnabled = false;
                     RecordingTimeBox.IsEnabled = false;
@@ -1418,26 +1457,27 @@ namespace kinect2_nidaq
 
             fMetadata.ColorResolution = new int[2] { Constants.kDefaultFrameWidth, Constants.kDefaultFrameHeight };
             fMetadata.DepthResolution = fMetadata.ColorResolution;
-            fMetadata.NidaqChannels = aiChannelList.SelectedItems.Count;
-            fMetadata.NidaqTerminalConfiguration = TerminalConfigBox.SelectedItem.ToString();
-            fMetadata.NidaqChannelNames = new string[aiChannelList.SelectedItems.Count];
+            
+            
+            
             fMetadata.SubjectName = SubjectName.Text;
             fMetadata.SessionName = SessionName.Text;
             fMetadata.IsLittleEndian = BitConverter.IsLittleEndian;
             fMetadata.DepthDataType = depthData.GetType().Name;
             fMetadata.ColorDataType = colorData.GetType().Name;
-
-            Type t = typeof(NidaqData);
-            System.Reflection.PropertyInfo t2 = t.GetProperty("Data");
-
-            if (t2 != null)
+            
+            if (IsNidaqEnabled)
             {
-                fMetadata.NidaqDataType = t2.PropertyType.Name;
+                fMetadata.NidaqChannels = aiChannelList.SelectedItems.Count;
+                fMetadata.NidaqTerminalConfiguration = TerminalConfigBox.SelectedItem.ToString();
+                fMetadata.NidaqChannelNames = new string[aiChannelList.SelectedItems.Count];
+                fMetadata.NidaqSamplingRate = SamplingRate;
+
+                Type t = typeof(NidaqData);
+                System.Reflection.PropertyInfo t2 = t.GetProperty("Data");
+                fMetadata.NidaqDataType = t2.PropertyType.Name;             
             }
-            else
-            {
-                fMetadata.NidaqDataType = null;
-            }
+            
 
 
             for (int i = 0; i < aiChannelList.SelectedItems.Count; i++)
