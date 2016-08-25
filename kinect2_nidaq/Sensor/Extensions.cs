@@ -80,9 +80,21 @@ namespace Sensor
 
             //ushort minDepth = e.DepthMinReliableDistance;
             //ushort maxDepth = e.DepthMaxReliableDistance;
+
+            ushort minDepth;
+            ushort maxDepth;
             
-            ushort minDepth = kinect2_nidaq.Properties.Settings.Default.DepthMinValue;
-            ushort maxDepth = kinect2_nidaq.Properties.Settings.Default.DepthMaxValue;
+            try
+            {
+                minDepth = kinect2_nidaq.Properties.Settings.Default.DepthMinValue;
+                maxDepth = kinect2_nidaq.Properties.Settings.Default.DepthMaxValue;               
+            }
+            catch
+            {
+                minDepth = e.DepthMinReliableDistance;
+                maxDepth = e.DepthMaxReliableDistance;
+            }
+
 
             minDepth = (ushort)(minDepth >= 0 ? minDepth : 1);
             maxDepth = (ushort)(maxDepth > minDepth ? maxDepth : minDepth + 1);

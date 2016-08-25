@@ -310,12 +310,6 @@ namespace kinect2_nidaq
                 {
                     // Inactive the Nidaq stream if we didn't find any devices
                     IsNidaqDevice = false;
-                    //CheckNidaqStream.IsChecked = false;
-                    //CheckNidaqStream.IsEnabled = false;
-                    //DevBox.IsEnabled = false;
-                    //SamplingRateBox.IsEnabled = false;
-                    //aiChannelList.IsEnabled = false;
-
                 }
 
                 CPUPerformance = new PerformanceCounter();
@@ -1199,6 +1193,7 @@ namespace kinect2_nidaq
                     SamplingRateBox.IsEnabled = false;
                     aiChannelList.IsEnabled = false;
                     TerminalConfigBox.IsEnabled = false;
+                    VoltageRangeBox.IsEnabled = false;
                 }
 
                 // if there is a nidaq and settings look good, let the user record nidaq data
@@ -1287,7 +1282,8 @@ namespace kinect2_nidaq
                     // we've gotten this far, meaning the preview button was not selected, and we want to record
                     // if any of the files overwrite old data or cannot be created, NO GO 
 
-                    if (FilePaths.All(p => !File.Exists(p[0])) && !File.Exists(FilePath_Tar) &&  Directory.Exists(SaveFolder))
+                    if (FilePaths.All(p => !File.Exists(p[0])) && !File.Exists(FilePath_Tar) &&  Directory.Exists(SaveFolder)
+                        && (CheckColorStream.IsChecked==true || CheckDepthStream.IsChecked==true || CheckNidaqStream.IsChecked==true))
                     {
                         //NidaqPrepare.IsEnabled = true;
                         StartButton.IsEnabled = true;
@@ -1563,6 +1559,7 @@ namespace kinect2_nidaq
             DevBox.IsEnabled = false;
             TerminalConfigBox.IsEnabled = false;
             aiChannelList.IsEnabled = false;
+            VoltageRangeBox.IsEnabled = false;
             SelectDirectory.IsEnabled = false;
             CheckColorStream.IsEnabled = false;
             CheckDepthStream.IsEnabled = false;
@@ -1578,7 +1575,8 @@ namespace kinect2_nidaq
             DevBox.IsEnabled = true;
             aiChannelList.IsEnabled = true;
             SamplingRateBox.IsEnabled = true;
-            TerminalConfigBox.IsEnabled = true; 
+            TerminalConfigBox.IsEnabled = true;
+            VoltageRangeBox.IsEnabled = true;
             SubjectName.IsEnabled = true;
             SessionName.IsEnabled = true;
             FolderName.IsEnabled = true;
@@ -1606,6 +1604,24 @@ namespace kinect2_nidaq
         }
 
         // Flip it!
+
+        private void Stream_Checked(object sender, RoutedEventArgs e)
+        {
+            SettingsChanged();
+        }
+
+        private void DepthBox_TextChanged(object sender, RoutedEventArgs e)
+        {
+            var textbox = sender as TextBox;
+            int value;
+            if (int.TryParse(textbox.Text, out value))
+            {
+                if (value > ushort.MaxValue)
+                    textbox.Text = ushort.MaxValue.ToString();
+                else if (value < 0)
+                    textbox.Text = "0";
+            }
+        }
 
         private void FlipDepth_Checked(object sender, RoutedEventArgs e)
         {

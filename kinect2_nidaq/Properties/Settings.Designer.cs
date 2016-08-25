@@ -94,5 +94,17 @@ namespace kinect2_nidaq.Properties {
                 this["DepthMaxValue"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("350")]
+        public int NidaqWidth {
+            get {
+                return ((int)(this["NidaqWidth"]));
+            }
+            set {
+                this["NidaqWidth"] = value;
+            }
+        }
     }
 }

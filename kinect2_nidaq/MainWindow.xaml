@@ -37,7 +37,7 @@
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="20" />
-                        <ColumnDefinition Width="350" />
+                        <ColumnDefinition Width="{Binding Source={x:Static properties:Settings.Default}, Path=NidaqWidth}" />
                         <ColumnDefinition Width="50" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="20" />
@@ -147,14 +147,14 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <CheckBox VerticalAlignment="Center" Name="CheckDepthStream">
+                            <CheckBox VerticalAlignment="Center" Name="CheckDepthStream" Checked="Stream_Checked">
                                 <TextBlock Text="Depth Stream" />
                             </CheckBox>
-                            <CheckBox VerticalAlignment="Center" Grid.Row="1" Grid.Column="0" Name="CheckColorStream" >
+                            <CheckBox VerticalAlignment="Center" Grid.Row="1" Grid.Column="0" Name="CheckColorStream" Checked="Stream_Checked" >
                                 <TextBlock Text="Color Stream" />
                             </CheckBox>
 
-                            <CheckBox VerticalAlignment="Center" Grid.Row="3" Grid.Column="0" Name="CheckNidaqStream">
+                            <CheckBox VerticalAlignment="Center" Grid.Row="3" Grid.Column="0" Name="CheckNidaqStream" Checked="Stream_Checked" >
                                 <TextBlock Text="Nidaq Stream" />
                             </CheckBox>
                             <Grid Grid.Row="0" Grid.Column="1" Grid.RowSpan="3" >
@@ -217,14 +217,14 @@
                                 Value="{Binding Source={x:Static properties:Settings.Default}, Path=DepthMinValue}" />
                         <TextBox Name="DepthMinBox"
                                  Text="{Binding ElementName=DepthMinSlider, Path=Value, UpdateSourceTrigger=PropertyChanged}"
-                                 Grid.Row="1" Grid.Column="2"/>
+                                 Grid.Row="1" Grid.Column="2" TextChanged="DepthBox_TextChanged"/>
                         <TextBlock Text="Max distance (mm)" HorizontalAlignment="Center" VerticalAlignment="Bottom" Grid.Column="3"/>
                         <Slider Name="DepthMaxSlider" Maximum="1000" Minimum="0" 
                                 IsSnapToTickEnabled="False" TickFrequency="100" TickPlacement="BottomRight" Grid.Row="1"
                                 Grid.Column="3" Value="{Binding Source={x:Static properties:Settings.Default}, Path=DepthMaxValue}" />
                         <TextBox Name="DepthMaxBox" 
                                  Text="{Binding ElementName=DepthMaxSlider, Path=Value, UpdateSourceTrigger=PropertyChanged}"
-                                 Grid.Row="1" Grid.Column="5"/>
+                                 Grid.Row="1" Grid.Column="5" TextChanged="DepthBox_TextChanged"/>
                         <CheckBox Name="FlipDepth" Content="Un-mirror-flip image" Grid.Row="2" HorizontalAlignment="Center" Checked="FlipDepth_Checked" Unchecked="FlipDepth_Unchecked" />
                     </Grid>
                 </Grid>
