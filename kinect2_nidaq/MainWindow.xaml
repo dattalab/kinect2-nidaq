@@ -147,14 +147,14 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <CheckBox VerticalAlignment="Center" Name="CheckDepthStream" Checked="Stream_Checked">
+                            <CheckBox VerticalAlignment="Center" Name="CheckDepthStream" Checked="Stream_Checked" Unchecked="Stream_Checked">
                                 <TextBlock Text="Depth Stream" />
                             </CheckBox>
-                            <CheckBox VerticalAlignment="Center" Grid.Row="1" Grid.Column="0" Name="CheckColorStream" Checked="Stream_Checked" >
+                            <CheckBox VerticalAlignment="Center" Grid.Row="1" Grid.Column="0" Name="CheckColorStream" Checked="Stream_Checked" Unchecked="Stream_Checked" >
                                 <TextBlock Text="Color Stream" />
                             </CheckBox>
 
-                            <CheckBox VerticalAlignment="Center" Grid.Row="3" Grid.Column="0" Name="CheckNidaqStream" Checked="Stream_Checked" >
+                            <CheckBox VerticalAlignment="Center" Grid.Row="3" Grid.Column="0" Name="CheckNidaqStream" Checked="Stream_Checked" Unchecked="Stream_Checked" >
                                 <TextBlock Text="Nidaq Stream" />
                             </CheckBox>
                             <Grid Grid.Row="0" Grid.Column="1" Grid.RowSpan="3" >

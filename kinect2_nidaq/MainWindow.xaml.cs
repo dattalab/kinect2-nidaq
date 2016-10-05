@@ -384,19 +384,28 @@ namespace kinect2_nidaq
 
             // Only create new files if we're not in preview mode
 
+
             if (CheckColorStream.IsChecked==true)
             {
                 //ColorFrameQueue = new ConcurrentQueue<ColorFrameEventArgs>();
+                ColorFrameCollection = new BlockingCollection<ColorFrameEventArgs>(Constants.kMaxFrames);
+
                 if (IsRecordingEnabled == true)
                 {
                     ColorTSFile = new FileStream(FilePath_ColorTs, FileMode.Append);
                     ColorTSStream = new StreamWriter(ColorTSFile);
+                    // throw an exception if the queue is already completed!
                     ColorDumpTask = System.Threading.Tasks.Task.Factory.StartNew(ColorRunner, fCancellationTokenSource.Token);
+
                 }
-                ColorFrameCollection = new BlockingCollection<ColorFrameEventArgs>(Constants.kMaxFrames);
+
                 ColorReader = sensor.ColorFrameSource.OpenReader();
                 ColorReader.FrameArrived += ColorReader_FrameArrived;
                 IsColorStreamEnabled = true;
+            }
+            else
+            {
+                IsColorStreamEnabled = false;
             }
 
             // Same for depth stream
@@ -404,23 +413,29 @@ namespace kinect2_nidaq
             if (CheckDepthStream.IsChecked == true)
             {
                 //DepthFrameQueue = new ConcurrentQueue<DepthFrameEventArgs>();
+                DepthFrameCollection = new BlockingCollection<DepthFrameEventArgs>(Constants.kMaxFrames);
+
                 if (IsRecordingEnabled==true)
-                {
+                {                    
                     DepthTSFile = new FileStream(FilePath_DepthTs, FileMode.Append);
                     DepthTSStream = new StreamWriter(DepthTSFile);
                     DepthVidFile = new FileStream(FilePath_DepthVid, FileMode.Append);
                     DepthVidStream = new BinaryWriter(DepthVidFile);
-                    DepthDumpTask = System.Threading.Tasks.Task.Factory.StartNew(DepthRunner, fCancellationTokenSource.Token);
+                    // throw an exception if the queue is already completed!
+                    DepthDumpTask = System.Threading.Tasks.Task.Factory.StartNew(DepthRunner, fCancellationTokenSource.Token);   
                 }
 
-                DepthFrameCollection = new BlockingCollection<DepthFrameEventArgs>(Constants.kMaxFrames);
                 DepthReader = sensor.DepthFrameSource.OpenReader();
                 DepthReader.FrameArrived += DepthReader_FrameArrived;
                 IsDepthStreamEnabled = true;
             }
+            else
+            {
+                IsDepthStreamEnabled = false;
+            }
 
-            
-            // Start the display timer
+
+           // Start the display timer
 
             ImageTimer.Start();
 
@@ -433,15 +448,17 @@ namespace kinect2_nidaq
             // TODO:  output simple sync signal (allow user to map depth/rgb for this)
             // TODO:  simple preview mode (don't write anything out)
             // TODO:  better nidaq status indicators (ready to roll, are rolling, etc.)
+            // TODO:  throw exception if we restart a new task with the queue already completed (task will just finish right away!)
 
             if (CheckNidaqStream.IsChecked==true && IsRecordingEnabled==true)
             {
                 NidaqPrepare();
 
-                // If NidaqPrepare worked, we should be rolling now
+                // If NidaqPrepare worked, we should be rolling now, with the nidaqqueue re-initialized!
                
                 if (IsNidaqEnabled==true)
                 {
+                    // throw an exception if the queue is already completed!
                     NidaqDumpTask = System.Threading.Tasks.Task.Factory.StartNew(NidaqRunner, fCancellationTokenSource.Token);
                 }
             }
@@ -561,10 +578,12 @@ namespace kinect2_nidaq
                 if (IsColorStreamEnabled == true)
                 {
                     ColorFrameCollection.CompleteAdding();
+                    //ColorFrameCollection.Dispose();
                 }
                 if (IsDepthStreamEnabled == true)
                 {
                     DepthFrameCollection.CompleteAdding();
+                    //DepthFrameCollection.Dispose();
                 }
                 if (IsNidaqEnabled == true)
                 {
@@ -597,6 +616,25 @@ namespace kinect2_nidaq
                     }
                 }
             }
+
+            // dispose of the resources to make sure we can cleanly re-initialize 
+
+            if (IsRecordingEnabled == true)
+            {
+                if (IsColorStreamEnabled == true)
+                {
+                    ColorFrameCollection.Dispose();
+                }
+                if (IsDepthStreamEnabled == true)
+                {
+                    DepthFrameCollection.Dispose();
+                }
+                if (IsNidaqEnabled == true)
+                {
+                    NidaqQueue.Dispose();
+                }
+            }   
+   
 
             // close the open videowriters
 
@@ -636,19 +674,23 @@ namespace kinect2_nidaq
 
             StatusBarProgress.IsEnabled = true;
             StatusBarProgressETA.IsEnabled = true;
+        
+            // now enable the statusbars
 
-            // If we were recording and the data isn't compressed, compress it!
+            ColorLight.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
+            DepthLight.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
+            NidaqLight.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
+
+            // If we were recording and the data isn't compressed, compress it!            
 
             if (!IsDataCompressed && IsRecordingEnabled)
             {
                 CompressTask = System.Threading.Tasks.Task.Factory.StartNew(CompressSession, fCancellationTokenSource.Token);
             }
-            else if (IsPreviewEnabled)
+            else if (!IsDataCompressed)
             {
-                ActivateSettings();
-                SettingsChanged();
+                IsSessionClean = true;
             }
-
             // now everything has been shut off, set all the flags accordingly
 
             IsRecordingEnabled = false;
@@ -657,18 +699,12 @@ namespace kinect2_nidaq
             IsColorStreamEnabled = false;
             IsPreviewEnabled = false;
 
-            // now enable the statusbars
-
-            ColorLight.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
-            DepthLight.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
-            NidaqLight.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
-
         }
 
 
         private void CompressSession()
         {
-
+           
             long totalBytes = 0;
             foreach (string[] FileName in FilePaths)
             {
@@ -701,14 +737,14 @@ namespace kinect2_nidaq
                     {
 
                         totalSeconds = ETATgz.Elapsed.TotalSeconds;
-                       
+
                         totalWritten += args.Written;
                         tarballProgress = 100 - 100 * (totalBytes - totalWritten) / totalBytes;
 
                         // seconds per percent
 
-                        ETAEstimate = (100-tarballProgress) * (totalSeconds / (double)(tarballProgress));
-                      
+                        ETAEstimate = (100 - tarballProgress) * (totalSeconds / (double)(tarballProgress));
+
                         ETAQueue.Enqueue(ETAEstimate);
                         while (ETAQueue.Count > Constants.etaMaxBuffer)
                         {
@@ -716,9 +752,9 @@ namespace kinect2_nidaq
                         }
 
                         //ETAAve = ETAEstimate;
-                        
+
                         ETAAve = ETAQueue.Average();
-                        
+
                         // time since last update
 
                     };
@@ -731,7 +767,7 @@ namespace kinect2_nidaq
                     if (File.Exists(FileName[0]))
                     {
                         Console.WriteLine(String.Format("{0} {1}", FileName[0], FileName[1]));
-                        tarball.Write(FileName[0],FileName[1]);
+                        tarball.Write(FileName[0], FileName[1]);
                     }
                 }
             }
@@ -744,8 +780,9 @@ namespace kinect2_nidaq
                 {
                     File.Delete(FileName[0]);
                 }
-                
+
             }
+            
 
             IsSessionClean = true;
             
@@ -823,7 +860,7 @@ namespace kinect2_nidaq
 
                     // don't add to the queue if we're in preview mode
 
-                    if (IsRecordingEnabled == true)
+                    if (IsRecordingEnabled && IsColorStreamEnabled)
                     {
                         ColorFrameCollection.Add(colorEventArgs);
                     }
@@ -876,7 +913,7 @@ namespace kinect2_nidaq
 
                     // don't add if we're in preview mode
 
-                    if (IsRecordingEnabled == true)
+                    if (IsRecordingEnabled && IsDepthStreamEnabled)
                     {
                         DepthFrameCollection.Add(depthEventArgs);
                     }
@@ -940,13 +977,17 @@ namespace kinect2_nidaq
                 ColorFrameEventArgs colorData = null;
                 while (ColorFrameCollection.TryTake(out colorData, timeout))
                 {
-                    if (!VideoWriter.IsOpen)
+                    if (IsColorStreamEnabled && IsRecordingEnabled)
                     {
-                        VideoWriter.Open(FilePath_ColorVid, Constants.kDefaultFrameWidth, Constants.kDefaultFrameHeight);
-                        VideoWriterInitialTimeSpan = colorData.RelativeTime;
+
+                        if (!VideoWriter.IsOpen)
+                        {
+                            VideoWriter.Open(FilePath_ColorVid, Constants.kDefaultFrameWidth, Constants.kDefaultFrameHeight);
+                            VideoWriterInitialTimeSpan = colorData.RelativeTime;
+                        }
+                        ColorTSStream.WriteLine(String.Format("{0} {1}", colorData.RelativeTime.TotalMilliseconds, colorData.TimeStamp));
+                        VideoWriter.WriteVideoFrame(colorData.ToBitmap().ToSystemBitmap(), colorData.RelativeTime - VideoWriterInitialTimeSpan);
                     }
-                    ColorTSStream.WriteLine(String.Format("{0} {1}", colorData.RelativeTime.TotalMilliseconds, colorData.TimeStamp));
-                    VideoWriter.WriteVideoFrame(colorData.ToBitmap().ToSystemBitmap(),colorData.RelativeTime-VideoWriterInitialTimeSpan);
                 }
             }          
             
@@ -961,12 +1002,15 @@ namespace kinect2_nidaq
             {
                 DepthFrameEventArgs depthData = null;
                 while (DepthFrameCollection.TryTake(out depthData, timeout))
-                {         
-                    
-                    DepthTSStream.WriteLine(String.Format("{0} {1}", depthData.RelativeTime.TotalMilliseconds, depthData.TimeStamp));
-                    foreach (ushort depthDatum in depthData.DepthData)
+                {
+
+                    if (IsDepthStreamEnabled && IsRecordingEnabled)
                     {
-                        DepthVidStream.Write(depthDatum);
+                        DepthTSStream.WriteLine(String.Format("{0} {1}", depthData.RelativeTime.TotalMilliseconds, depthData.TimeStamp));
+                        foreach (ushort depthDatum in depthData.DepthData)
+                        {
+                            DepthVidStream.Write(depthDatum);
+                        }
                     }
                 }
             }
@@ -1366,7 +1410,7 @@ namespace kinect2_nidaq
 
             if (IsDepthStreamEnabled == true) 
             {
-                StatusBarColor.Value = ((double)DepthFrameCollection.Count / (double)Constants.kMaxFrames)*100;
+                StatusBarDepth.Value = ((double)DepthFrameCollection.Count / (double)Constants.kMaxFrames)*100;
                 DepthLight.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Green);
             }
 
@@ -1433,7 +1477,6 @@ namespace kinect2_nidaq
                     if (!SubjectName.IsEnabled)
                     {
                         ActivateSettings();
-                        SettingsChanged();
                     }
                     StatusBarProgress.Value = 100;
                     StatusBarProgressETA.Text = "ETA: (0 mins, 0 secs)";
@@ -1442,6 +1485,12 @@ namespace kinect2_nidaq
             }
             else if (IsSessionClean)
             {
+                //ActivateSettings();
+                if (!SubjectName.IsEnabled)
+                {
+                    ActivateSettings();
+                }
+
                 StatusBarProgress.Value = 100;
                 StatusBarProgressETA.Text = "ETA: (0 mins, 0 secs)";
                 StatusBarSessionText.Text = "Done";
@@ -1602,8 +1651,6 @@ namespace kinect2_nidaq
             SettingsChanged();
             //ActivateSettings();
         }
-
-        // Flip it!
 
         private void Stream_Checked(object sender, RoutedEventArgs e)
         {
