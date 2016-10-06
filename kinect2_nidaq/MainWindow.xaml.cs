@@ -1279,6 +1279,8 @@ namespace kinect2_nidaq
                     // if we have anything in the time box, then disable the continuous button
                     CheckNoTimer.IsEnabled = false;
                     ContinuousMode = false;
+                    RecordingTimeText.IsEnabled = true;
+                    RecordingTimeBox.IsEnabled = true;
                     RecordingTime = Convert.ToDouble(RecordingTimeBox.Text) * 60e3;
                     //StatusBarSessionProgress.IsEnabled = true;
                 }
@@ -1529,16 +1531,14 @@ namespace kinect2_nidaq
 
                 Type t = typeof(NidaqData);
                 System.Reflection.PropertyInfo t2 = t.GetProperty("Data");
-                fMetadata.NidaqDataType = t2.PropertyType.Name;             
+                fMetadata.NidaqDataType = t2.PropertyType.Name;
+
+                for (int i = 0; i < aiChannelList.SelectedItems.Count; i++)
+                {
+                    fMetadata.NidaqChannelNames[i] = aiChannelList.SelectedItems[i].ToString();
+                }
             }
             
-
-
-            for (int i = 0; i < aiChannelList.SelectedItems.Count; i++)
-            {
-                fMetadata.NidaqChannelNames[i] = aiChannelList.SelectedItems[i].ToString();
-            }
-
             fMetadata.StartTime = DateTime.Now;
 
             JsonSerializer serializer = new JsonSerializer();
@@ -1674,12 +1674,14 @@ namespace kinect2_nidaq
         {
             System.Windows.Media.RotateTransform rotateTransform = new System.Windows.Media.RotateTransform(180);
             DepthDisplay.RenderTransform = rotateTransform;
+            ColorDisplay.RenderTransform = rotateTransform;
         }
 
         private void FlipDepth_Unchecked(object sender, RoutedEventArgs e)
         {
             System.Windows.Media.RotateTransform rotateTransform = new System.Windows.Media.RotateTransform(0);
             DepthDisplay.RenderTransform = rotateTransform;
+            ColorDisplay.RenderTransform = rotateTransform;
         }
  
     }

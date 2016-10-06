@@ -190,7 +190,7 @@
                         Width="512"
                         Stretch="UniformToFill"
                         VerticalAlignment="Top"
-                        HorizontalAlignment="Left" Grid.Row="1"/>
+                        HorizontalAlignment="Left" Grid.Row="1" RenderTransformOrigin="0.5, 0.5"/>
                     <Image x:Name="DepthDisplay"
                        HorizontalAlignment="Right"
                        Height="424"
