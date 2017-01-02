@@ -428,6 +428,7 @@ namespace kinect2_nidaq
                 DepthReader = sensor.DepthFrameSource.OpenReader();
                 DepthReader.FrameArrived += DepthReader_FrameArrived;
                 IsDepthStreamEnabled = true;
+
             }
             else
             {
@@ -646,32 +647,37 @@ namespace kinect2_nidaq
             // close the readers, files and filewriting tasks
 
 
-            if (IsRecordingEnabled == true)
+            if (IsColorStreamEnabled == true && IsRecordingEnabled == true)
             {
-                if (IsColorStreamEnabled == true)
-                {
-                    ColorReader.Dispose();
-                    ColorTSStream.Close();
-                    ColorDumpTask.Dispose();                  
-                }
-               
-                if (IsDepthStreamEnabled == true)
-                {
-                    DepthReader.Dispose();
-                    DepthTSStream.Close();
-                    DepthVidStream.Close();
-                    DepthDumpTask.Dispose();                
-                }
-
-                if (IsNidaqEnabled == true)
-                {
-                    NidaqStream.Close();
-                    NidaqFile.Close();
-                    NidaqDumpTask.Dispose();
-                }
-                
+                ColorReader.Dispose();
+                ColorTSStream.Close();
+                ColorDumpTask.Dispose();
+            }
+            else if (IsColorStreamEnabled == true)
+            {
+                ColorReader.Dispose();
+            }
+                    
+            if (IsDepthStreamEnabled == true && IsRecordingEnabled== true)
+            {
+                DepthReader.Dispose();
+                DepthTSStream.Close();
+                DepthVidStream.Close();
+                DepthDumpTask.Dispose(); 
+            }
+            else if (IsDepthStreamEnabled == true)
+            {
+                DepthReader.Dispose();
             }
 
+            if (IsNidaqEnabled == true && IsRecordingEnabled ==true)
+            {
+                NidaqStream.Close();
+                NidaqFile.Close();
+                NidaqDumpTask.Dispose();
+            }
+                
+          
             StatusBarProgress.IsEnabled = true;
             StatusBarProgressETA.IsEnabled = true;
         
@@ -1301,7 +1307,10 @@ namespace kinect2_nidaq
                     && PreviewMode.IsChecked == false)
                 {
 
-                    string BasePath = Path.GetTempPath();
+                    // Temporary directory is defined here
+
+                    //string BasePath = Path.GetTempPath();
+                    string BasePath = SaveFolder;
                     string now = DateTime.Now.ToString("yyyyMMddHHmmss");
 
                     FilePath_ColorTs = Path.Combine(BasePath, String.Format("rgb_ts_{0}.txt", now));
