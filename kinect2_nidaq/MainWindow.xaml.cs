@@ -187,6 +187,7 @@ namespace kinect2_nidaq
         private bool IsRecordingEnabled = false;
         private bool IsColorStreamEnabled = false;
         private bool IsDepthStreamEnabled = false;
+        private bool IsCompressionEnabled = false;
         private bool IsDataCompressed = false;
         private bool IsSessionClean = false;
         private bool IsNidaqEnabled = false;
@@ -220,9 +221,10 @@ namespace kinect2_nidaq
 
 
         /// <summary>
-        /// Save folder
+        /// Save folder for tmp data and variable for directory to move files to if we are not compressing the data
         /// </summary>
         private String SaveFolder;
+        private String MoveFolder;
         
         /// <summary>
         /// All of the files!
@@ -368,7 +370,7 @@ namespace kinect2_nidaq
 
             ColorFramesDropped = 0;
             DepthFramesDropped = 0;
-
+   
             // if the user checked previewmode, don't record any data
 
             if (PreviewMode.IsChecked == true)
@@ -381,6 +383,13 @@ namespace kinect2_nidaq
                 IsRecordingEnabled = true;
                 IsPreviewEnabled = false;
             }
+
+            if (!IsCompressionEnabled && IsRecordingEnabled)
+            {
+                Directory.CreateDirectory(MoveFolder);
+                Console.WriteLine("The directory was created successfully at {0}.", Directory.GetCreationTime(MoveFolder));
+            }
+
 
             // Only create new files if we're not in preview mode
 
@@ -689,9 +698,23 @@ namespace kinect2_nidaq
 
             // If we were recording and the data isn't compressed, compress it!            
 
-            if (!IsDataCompressed && IsRecordingEnabled)
+            if (!IsDataCompressed && IsRecordingEnabled && IsCompressionEnabled)
             {
                 CompressTask = System.Threading.Tasks.Task.Factory.StartNew(CompressSession, fCancellationTokenSource.Token);
+            }
+            else if (!IsDataCompressed && IsRecordingEnabled && !IsCompressionEnabled)
+            {
+                foreach (string[] FileName in FilePaths)
+                {
+                    Console.WriteLine(String.Format("{0} {1}", FileName[0], FileName[1]));
+
+                    if (File.Exists(FileName[0]))
+                    {
+                        Console.WriteLine(String.Format("Moving {0} to {1}", FileName[0], Path.Combine(MoveFolder,FileName[1])));
+                        File.Move(FileName[0], Path.Combine(MoveFolder, FileName[1]));
+                    }
+                }
+                IsSessionClean = true;
             }
             else if (!IsDataCompressed)
             {
@@ -1226,13 +1249,15 @@ namespace kinect2_nidaq
                 SaveFolder = FolderName.Text;
                 double tmp = 0;
                 bool TimeFlag = true;
+                IsCompressionEnabled = CompressionMode.IsChecked == true;
+                CompressionMode.IsEnabled = true;
 
                 // if preview is checked, then we're previewing depth and color
 
                 // else if notimer is selected, disable time related options
                 // else if recording time box is specified correctly, then convert recording time to minutes
                 // else everything enabled          
-      
+
                 // how do the nidaq options look?
 
                 // disable the nidaq stuff if there's no nidaq device
@@ -1270,6 +1295,7 @@ namespace kinect2_nidaq
                     CheckNoTimer.IsChecked = false;
                     CheckNoTimer.IsEnabled = false;
                     RecordingTimeBox.IsEnabled = false;
+                    CompressionMode.IsEnabled = false;
                 }
                 else if (CheckNoTimer.IsChecked == true)
                 {
@@ -1310,15 +1336,17 @@ namespace kinect2_nidaq
                     // Temporary directory is defined here
 
                     //string BasePath = Path.GetTempPath();
-                    string BasePath = SaveFolder;
+                    // string BasePath = SaveFolder;
                     string now = DateTime.Now.ToString("yyyyMMddHHmmss");
 
-                    FilePath_ColorTs = Path.Combine(BasePath, String.Format("rgb_ts_{0}.txt", now));
-                    FilePath_ColorVid = Path.Combine(BasePath, String.Format("rgb_{0}.mp4", now));
-                    FilePath_DepthTs = Path.Combine(BasePath, String.Format("depth_ts_{0}.txt", now));
-                    FilePath_DepthVid = Path.Combine(BasePath, String.Format("depth_{0}.dat", now));
-                    FilePath_Nidaq = Path.Combine(BasePath, String.Format("nidaq_{0}.dat", now));
-                    FilePath_Metadata = Path.Combine(BasePath, String.Format("metadata_{0}.json", now));
+                    MoveFolder = Path.Combine(SaveFolder,String.Format("session_{0}", now));
+
+                    FilePath_ColorTs = Path.Combine(SaveFolder, String.Format("rgb_ts_{0}.txt", now));
+                    FilePath_ColorVid = Path.Combine(SaveFolder, String.Format("rgb_{0}.mp4", now));
+                    FilePath_DepthTs = Path.Combine(SaveFolder, String.Format("depth_ts_{0}.txt", now));
+                    FilePath_DepthVid = Path.Combine(SaveFolder, String.Format("depth_{0}.dat", now));
+                    FilePath_Nidaq = Path.Combine(SaveFolder, String.Format("nidaq_{0}.dat", now));
+                    FilePath_Metadata = Path.Combine(SaveFolder, String.Format("metadata_{0}.json", now));
                     
                     // Paths for the tarball and metadata
 
@@ -1338,7 +1366,8 @@ namespace kinect2_nidaq
                     // if any of the files overwrite old data or cannot be created, NO GO 
 
                     if (FilePaths.All(p => !File.Exists(p[0])) && !File.Exists(FilePath_Tar) &&  Directory.Exists(SaveFolder)
-                        && (CheckColorStream.IsChecked==true || CheckDepthStream.IsChecked==true || CheckNidaqStream.IsChecked==true))
+                        && (CheckColorStream.IsChecked==true || CheckDepthStream.IsChecked==true || CheckNidaqStream.IsChecked==true)
+                        && (IsCompressionEnabled==true || (IsCompressionEnabled==false && !Directory.Exists(MoveFolder))))
                     {
                         //NidaqPrepare.IsEnabled = true;
                         StartButton.IsEnabled = true;
@@ -1626,6 +1655,7 @@ namespace kinect2_nidaq
             RecordingTimeBox.IsEnabled = false;
             RecordingTimeText.IsEnabled = false;
             PreviewMode.IsEnabled = false;
+            CompressionMode.IsEnabled = false;
         }
 
         private void ActivateSettings()
@@ -1646,6 +1676,7 @@ namespace kinect2_nidaq
             RecordingTimeBox.IsEnabled = true;
             RecordingTimeText.IsEnabled = true;
             PreviewMode.IsEnabled = true;
+            CompressionMode.IsEnabled = true;
         }
 
         private void PreviewMode_Checked(object sender, RoutedEventArgs e)
@@ -1681,18 +1712,29 @@ namespace kinect2_nidaq
 
         private void FlipDepth_Checked(object sender, RoutedEventArgs e)
         {
-            System.Windows.Media.RotateTransform rotateTransform = new System.Windows.Media.RotateTransform(180);
+            System.Windows.Media.ScaleTransform rotateTransform = new System.Windows.Media.ScaleTransform();
+            rotateTransform.ScaleX = -1;
             DepthDisplay.RenderTransform = rotateTransform;
             ColorDisplay.RenderTransform = rotateTransform;
         }
 
         private void FlipDepth_Unchecked(object sender, RoutedEventArgs e)
         {
-            System.Windows.Media.RotateTransform rotateTransform = new System.Windows.Media.RotateTransform(0);
+            System.Windows.Media.ScaleTransform rotateTransform = new System.Windows.Media.ScaleTransform();
+            rotateTransform.ScaleX = 1;
             DepthDisplay.RenderTransform = rotateTransform;
             ColorDisplay.RenderTransform = rotateTransform;
         }
- 
+
+        private void CompressionMode_Unchecked(object sender, RoutedEventArgs e)
+        {
+            SettingsChanged();
+        }
+
+        private void CompressionMode_Checked(object sender, RoutedEventArgs e)
+        {
+            SettingsChanged();
+        }
     }
 
 }

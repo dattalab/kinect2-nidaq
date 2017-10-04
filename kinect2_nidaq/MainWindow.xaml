@@ -93,7 +93,7 @@
                             <RowDefinition Height="*" />
                             <RowDefinition Height="40" />
                             <RowDefinition Height="*" />
-                            <RowDefinition Height="40" />
+                            <RowDefinition Height="60" />
                             <RowDefinition Height="40" />
                             <RowDefinition Height="*" />
                             <RowDefinition Height="10" />
@@ -119,12 +119,16 @@
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*" />
                                 <RowDefinition Height="*" />
+                                <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
                             <CheckBox Name="CheckNoTimer" VerticalAlignment="Center" Click="CheckNoTimer_Checked" >
                                 <TextBlock Text="Record until user clicks stop" VerticalAlignment="Center" />
                             </CheckBox>
                             <CheckBox VerticalAlignment="Center" Grid.Row="1" Grid.Column="0" Name="PreviewMode" Checked="PreviewMode_Checked" Unchecked="PreviewMode_Unchecked">
                                 <TextBlock Text="Preview Mode" />
+                            </CheckBox>
+                            <CheckBox VerticalAlignment="Center" Grid.Row="2" Grid.Column="0" Name="CompressionMode" Checked="CompressionMode_Checked" Unchecked="CompressionMode_Unchecked">
+                                <TextBlock Text="Compress Session" />
                             </CheckBox>
                             <Grid Grid.Column="1" Grid.RowSpan="2">
                                 <Grid.ColumnDefinitions>
