@@ -1,4 +1,6 @@
 # kinect2-nidaq
+[![DOI](https://zenodo.org/badge/54425913.svg)](https://zenodo.org/badge/latestdoi/54425913)
+
 Interface for simultaneous NI-DAQ and Kinect v2 acquisition
 
 # License
